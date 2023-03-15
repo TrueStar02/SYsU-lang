@@ -1,0 +1,10 @@
+-FunctionDecl 0x168e808 <line:27:1, line:319:1> line:27:5 main 'int ()'
+  `-CompoundStmt 0x168ea68 <col:12, line:319:1>
+    `-ReturnStmt 0x168ea58 <line:28:3, line:318:31>
+      `-ImplicitCastExpr 0x168ea40 <line:28:10, line:318:31> 'int' <IntegralCast>
+        `-CallExpr 0x168e9e8 <line:28:10, line:318:31> 'long long'
+          |-ImplicitCastExpr 0x168e9d0 <line:28:10> 'long long (*)(const char *)' <FunctionToPointerDecay>
+          | `-DeclRefExpr 0x168e8a8 <col:10> 'long long (const char *)' Function 0x166d6e8 'wk_puts' 'long long (const char *)'
+          `-ImplicitCastExpr 0x168ea28 <line:29:7> 'const char *':'const char *' <NoOp>
+            `-ImplicitCastExpr 0x168ea10 <col:7> 'char *' <ArrayToPointerDecay>
+              `-StringLiteral 0x168e910 <col:7> 'char [73]' lvalue "    

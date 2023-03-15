@@ -1,0 +1,767 @@
+%code requires
+{
+class Tree;
+}
+%{
+#include "parser.hh"
+#include <vector>
+#include <memory>
+#include <llvm/Support/JSON.h>
+#include <llvm/Support/MemoryBuffer.h>
+#include <llvm/Support/raw_ostream.h>
+#define yyerror(x)                                                             \
+  do {                                                                         \
+    llvm::errs() << (x);                                                       \
+  } while (0)
+
+namespace {
+auto llvmin = llvm::MemoryBuffer::getFileOrSTDIN("-");
+auto input = llvmin.get() -> getBuffer();
+auto end = input.end(), it = input.begin();
+auto wk_getline(char endline = "\n"[0]) {
+  auto beg = it;
+  while (it != end && *it != endline)
+    ++it;
+  auto len = it - beg;
+  if (it != end && *it == endline)
+    ++it;
+  return llvm::StringRef(beg, len);
+}
+Tree* root;
+} // namespace
+
+// 以下树结构仅供参考，你可以随意修改或定义自己喜欢的形式
+class Tree{
+public:
+  std::string kind;
+  std::string name;
+  std::string value;
+  std::vector<Tree *> sons;
+  Tree(std::string kind="", std::string name="", std::string value=""): kind(kind), name(name), value(value) {}
+  void addSon(Tree* son){ sons.emplace_back(son); }
+  void mergeSon(Tree* son){ for (auto ptr:son -> sons)sons.emplace_back(ptr); free(son);}
+  llvm::json::Value toJson() const {
+    llvm::json::Object tmp{
+      {"kind", kind},
+      {"name", name},
+      {"value", value},
+      {"inner", llvm::json::Array{}}
+    };
+    for(auto&& it: sons) tmp.get("inner")->getAsArray()->push_back(it->toJson());
+    return tmp;
+  }
+  void print(int depth=0) const {
+    yyerror("|");
+    for(int i=0;i<depth;++i) yyerror(" ");
+    yyerror("-"+kind+" "+name+" "+value);
+    for(auto&& it: sons)
+    {
+      yyerror("\n");
+      it->print(depth+1);
+    }
+    if(!depth) yyerror("\n\n");
+  }
+};
+
+auto yylex() {
+  auto tk = wk_getline();
+  auto b = tk.find("'") + 1, e = tk.rfind("'");
+  auto s = tk.substr(b, e - b).str(), t = tk.substr(0, tk.find(" ")).str();
+  if (t == "numeric_constant") {
+    yylval = new Tree("IntegerLiteral", "", s);
+    return T_NUMERIC_CONSTANT;
+  }
+  if (t == "identifier") {
+    yylval = new Tree("id", s);
+    return T_IDENTIFIER;
+  }
+  if (t == "int")
+    return T_INT;
+  if (t == "float")
+    return T_FLOAT;
+  if(t == "long")
+    return T_LONG;
+  if(t == "char")
+    return T_CHAR;
+  if (t == "return")
+    return T_RETURN;
+  if (t == "semi")
+    return T_SEMI;
+  if (t == "l_paren")
+    return T_L_PAREN;
+  if (t == "r_paren")
+    return T_R_PAREN;
+  if (t == "l_brace")
+    return T_L_BRACE;
+  if (t == "r_brace")
+    return T_R_BRACE;
+  if (t == "const")
+    return T_CONST;
+  if (t == "comma")
+    return T_COMMA;
+  if (t == "l_square")
+    return T_L_SQUARE;
+  if (t == "r_square")
+    return T_R_SQUARE;  
+  if (t == "equal")
+    return T_EQUAL;
+  if (t == "void")
+    return T_VOID;
+  if (t == "if")
+    return T_IF;;
+  if (t == "else")
+    return T_ELSE;
+  if (t == "while")
+    return T_WHILE;
+  if (t == "do")
+    return T_DO;
+  if (t == "for")
+    return T_FOR;
+  if (t == "break")
+    return T_BREAK;
+  if (t == "continue")
+    return T_CONTINUE;
+  if (t == "tilde")
+    return T_TILDE;
+  if (t == "plus")
+    return T_PLUS;
+  if (t == "minus")
+    return T_MINUS;  
+  if (t == "exclaim")
+    return T_EXCLAIM;
+  if (t == "star")
+    return T_STAR;
+  if (t == "slash")
+    return T_SLASH;
+  if (t == "percent")
+    return T_PERCENT;
+  if (t == "less")
+    return T_LESS;
+  if (t == "greater")
+    return T_GREATER;
+  if (t == "lessequal")
+    return T_LESSEQUAL;
+  if (t == "greaterequal")
+    return T_GREATEREQUAL;
+  if (t == "equalequal")
+    return T_EQUALEQUAL;
+  if (t == "exclaimequal")
+    return T_EXCLAIMEQUAL;
+  if (t == "ampamp")
+    return T_AMPAMP;
+  if (t == "pipepipe")
+    return T_PIPEPIPE;
+  if (t == "amp")
+    return T_AMP;
+  if (t == "caret")
+    return T_CARET;
+  if (t == "pipe")
+    return T_PIPE;
+  if (t == "lessless")
+    return T_LESSLESS;
+  if (t == "greatergreater")
+    return T_GREATERGREATER;
+  if (t == "ellipsis")
+    return T_ELLIPSIS;
+  if (t == "string_literal")
+    return T_STRING_LITERAL;
+  if (t == "plusequal")
+    return T_PLUSEQUAL;
+  if (t == "minusequal")
+    return T_MINUSEQUAL;
+  if (t == "starequal")
+    return T_STAREQUAL;
+  if (t == "slashequal")
+    return T_SLASHEQUAL;
+  if (t == "percentequal")
+    return T_PERCENTEQUAL;
+  if (t == "ampequal")
+    return T_AMPEQUAL;
+  if (t == "caretequal")
+    return T_CARETEQUAL;
+  if (t == "pipeequal")
+    return T_PIPEEQUAL;
+  if (t == "lesslessequal")
+    return T_LESSLESSEQUAL;
+  if (t == "greatergreaterequal")
+    return T_GREATERGREATEREQUAL;
+  if (t == "plusplus")
+    return T_PLUSPLUS;
+  if (t == "minusminus")
+    return T_MINUSMINUS; 
+  return YYEOF;
+}
+
+int main() {
+  yyparse();
+  root->print();
+  llvm::outs() << root->toJson() << "\n";
+}
+%}
+%define api.value.type { Tree* }
+
+%token T_NUMERIC_CONSTANT
+%token T_IDENTIFIER
+%token T_INT
+%token T_FLOAT
+%token T_LONG
+%token T_CHAR
+%token T_RETURN
+%token T_SEMI
+%token T_L_PAREN
+%token T_R_PAREN
+%token T_L_BRACE
+%token T_R_BRACE
+%token T_CONST;
+%token T_COMMA;
+%token T_L_SQUARE;
+%token T_R_SQUARE;  
+%token T_EQUAL;
+%token T_VOID;
+%token T_IF;
+%token T_ELSE;
+%token T_WHILE;
+%token T_DO;
+%token T_FOR;
+%token T_BREAK;
+%token T_CONTINUE;
+%token T_TILDE; 
+%token T_PLUS;
+%token T_MINUS;  
+%token T_EXCLAIM;
+%token T_STAR;
+%token T_SLASH;
+%token T_PERCENT;
+%token T_LESS;
+%token T_GREATER;
+%token T_LESSEQUAL;
+%token T_GREATEREQUAL;
+%token T_EQUALEQUAL;
+%token T_EXCLAIMEQUAL;
+%token T_AMPAMP;
+%token T_PIPEPIPE;
+%token T_AMP;
+%token T_CARET;
+%token T_PIPE;
+%token T_LESSLESS;
+%token T_GREATERGREATER;
+%token T_ELLIPSIS;
+%token T_STRING_LITERAL;
+%token T_PLUSEQUAL;
+%token T_MINUSEQUAL;
+%token T_STAREQUAL;
+%token T_SLASHEQUAL;
+%token T_PERCENTEQUAL;
+%token T_AMPEQUAL;
+%token T_CARETEQUAL;
+%token T_PIPEEQUAL;
+%token T_LESSLESSEQUAL;
+%token T_GREATERGREATEREQUAL;
+%token T_PLUSPLUS;
+%token T_MINUSMINUS; 
+%start Begin
+%%
+Begin: CompUnit {
+    root = $1;
+  }
+  
+
+CompUnit: GlobalDecl {
+    auto ptr = new Tree("TranslationUnitDecl");
+    ptr->mergeSon($1);
+    $$ = ptr;
+  }
+| CompUnit GlobalDecl {
+    auto ptr = $1;
+    ptr -> mergeSon($2);
+    $$ = ptr;
+}
+	
+
+GlobalDecl: Decl {
+    //$$ = $1;
+    auto ptr = new Tree("Temp");
+    ptr->addSon($1);
+    $$ = ptr;
+}
+|  FuncDef{
+    auto ptr = new Tree("Temp");
+    ptr->addSon($1);
+    $$ = ptr;
+};
+
+	
+
+FuncDef: T_INT T_IDENTIFIER T_L_PAREN T_R_PAREN Block {
+    auto ptr = new Tree("FunctionDecl", $2->name);
+    free($2);
+    ptr->addSon($5);
+    $$ = ptr;
+}
+|  T_INT T_IDENTIFIER T_L_PAREN FuncFParams T_R_PAREN Block {
+    auto ptr = $4;
+    ptr->name = $2->name;
+    free($2);
+    ptr->addSon($6);
+    $$ = ptr;
+}
+| T_VOID T_IDENTIFIER T_L_PAREN T_R_PAREN Block {
+    auto ptr = new Tree("FunctionDecl", $2->name);
+    free($2);
+    ptr->addSon($5);
+    $$ = ptr;
+}
+|  T_VOID T_IDENTIFIER T_L_PAREN FuncFParams T_R_PAREN Block {
+    auto ptr = $4;
+    ptr->name = $2->name;
+    free($2);
+    ptr->addSon($6);
+    $$ = ptr;
+};
+
+
+FuncFParams : FuncFParam {
+    auto ptr = new Tree("FunctionDecl");
+    ptr -> addSon($1);
+    $$ = ptr;
+}
+| FuncFParams T_COMMA FuncFParam {
+    auto ptr = $1;
+    ptr -> addSon($3);
+    $$ = ptr;
+};
+
+FuncFParam : BType T_IDENTIFIER {
+    auto ptr = new Tree("ParmVarDecl", $2->name);
+    free($2);
+    $$ = ptr;
+};
+
+
+FuncCall: T_IDENTIFIER T_L_PAREN T_R_PAREN{
+    auto ptr = new Tree("CallExpr");
+    auto tp1 = new Tree("DeclRefExpr", $1->name);
+    free($1);
+    auto tp2 = new Tree("ImplicitCastExpr");
+    tp2 -> addSon(tp1);
+    ptr -> addSon(tp2);
+    $$ = ptr;
+}
+|  T_IDENTIFIER T_L_PAREN FuncRParams T_R_PAREN{
+    auto ptr = $3;
+    auto tp1 = new Tree("DeclRefExpr", $1->name);
+    free($1);
+    auto tp2 = new Tree("ImplicitCastExpr");
+    tp2 -> addSon(tp1);
+    ptr -> sons[0] = tp2;
+    $$ = ptr;
+};
+
+FuncRParams : AssignExp {
+    auto ptr = new Tree("CallExpr");
+    ptr -> addSon(nullptr); 
+    ptr -> addSon($1);
+    $$ = ptr;
+}
+| FuncRParams T_COMMA AssignExp {
+    auto ptr = $1;
+    ptr -> addSon($3);
+    $$ = ptr;
+};
+
+Block: T_L_BRACE BlockItems T_R_BRACE {
+    $$ = $2;
+  }
+| T_L_BRACE T_R_BRACE {
+    auto ptr = new Tree("CompoundStmt");
+    $$ = ptr;
+}
+  ;
+
+BlockItems: BlockItem {
+    auto ptr = new Tree("CompoundStmt");
+    ptr -> addSon($1);
+    $$ = ptr;
+}
+| BlockItems BlockItem {
+    auto ptr = $1;
+    ptr -> addSon($2);
+    $$ = ptr;
+};
+
+BlockItem: Decl {
+    $$ = $1;
+}
+| Stmt {
+    $$ = $1; 
+};
+
+Decl: ConstDecl {
+    $$ = $1;
+}
+| VarDecl {
+    $$ = $1;
+};
+
+ConstDecl : T_CONST BType ConstDefs T_SEMI {
+    $$ = $3;
+};
+
+VarDecl : BType VarDefs T_SEMI {
+
+    $$ = $2;
+};
+
+BType : T_INT{}
+| T_LONG T_LONG {}
+| T_CHAR {}
+| T_FLOAT {};
+
+ConstDefs : ConstDef {
+    auto ptr = new Tree("DeclStmt");
+    ptr -> addSon($1);
+    $$ = ptr;
+}
+| ConstDefs T_COMMA ConstDef {
+    auto ptr = $1;
+    ptr -> addSon($3);
+    $$ = ptr;
+};
+
+ConstDef : T_IDENTIFIER T_EQUAL ConstInitVal {
+    auto ptr = new Tree("VarDecl", $1->name);
+    free($1);
+    ptr -> addSon($3);
+    $$ = ptr;
+};
+
+VarDefs : VarDef {
+    auto ptr = new Tree("DeclStmt");
+    ptr -> addSon($1);
+    $$ = ptr;
+}
+| VarDefs T_COMMA VarDef {
+    auto ptr = $1;
+    ptr -> addSon($3);
+    $$ = ptr;
+};
+
+VarDef : T_IDENTIFIER T_EQUAL InitVal {
+    auto ptr = new Tree("VarDecl", $1->name);
+    free($1);
+    ptr -> addSon($3);
+    $$ = ptr;
+}
+| T_IDENTIFIER {
+    auto ptr = new Tree("VarDecl", $1->name);
+    free($1);
+    $$ = ptr;
+};
+
+ConstInitVal : ConstExp {
+    $$ = $1;
+};
+
+ConstExp : LOrExp {
+    $$ = $1;
+};
+
+InitVal : LOrExp {
+    $$ = $1;
+};
+
+LVal: T_IDENTIFIER {
+    auto ptr = new Tree("DeclRefExpr", $1->name);
+    free($1);
+    $$ = ptr;
+};
+
+Stmt: T_RETURN Exp T_SEMI {
+    auto ptr = new Tree("ReturnStmt");
+    ptr->addSon($2);
+    $$ = ptr;
+}
+| T_RETURN T_SEMI {
+    auto ptr = new Tree("ReturnStmt");
+    $$ = ptr;
+}
+| Block {$$ = $1;}
+| Exp T_SEMI {$$ = $1;}
+| T_SEMI {
+    auto ptr = new Tree("NullStmt");
+    $$ = ptr;
+}
+| T_IF T_L_PAREN Exp T_R_PAREN Stmt {
+    auto ptr = new Tree("IfStmt");
+    ptr->addSon($3);
+    ptr->addSon($5);
+    $$ = ptr;
+} 
+| T_IF T_L_PAREN Exp T_R_PAREN Stmt T_ELSE Stmt {
+    auto ptr = new Tree("IfStmt");
+    ptr->addSon($3);
+    ptr->addSon($5);
+    ptr->addSon($7);
+    $$ = ptr;
+}
+| T_WHILE T_L_PAREN Exp T_R_PAREN Stmt {
+    auto ptr = new Tree("WhileStmt");
+    ptr->addSon($3);
+    ptr->addSon($5);
+    $$ = ptr;
+}
+| T_DO Block T_WHILE T_L_PAREN Exp T_R_PAREN T_SEMI {
+    auto ptr = new Tree("DoStmt");
+    ptr->addSon($2);
+    ptr->addSon($5);
+    $$ = ptr;
+}
+| T_FOR T_L_PAREN Exp T_SEMI Exp T_SEMI Exp T_R_PAREN Stmt {
+    auto ptr = new Tree("ForStmt");
+    ptr->addSon($3);
+    auto nptr = new Tree("");
+    ptr ->addSon(nptr);
+    ptr->addSon($5);
+    ptr->addSon($7);
+    ptr->addSon($9);
+    $$ = ptr;
+}
+| T_BREAK T_SEMI {
+    auto ptr = new Tree("BreakStmt");
+    $$ = ptr;
+}
+| T_CONTINUE T_SEMI {
+    auto ptr = new Tree("ContinueStmt");
+    $$ = ptr;
+};
+
+
+Exp: AssignExp {
+    $$ = $1;
+}
+| Exp T_COMMA AssignExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+}
+
+PostfixExp: PrimaryExp  {
+    $$ = $1;
+}
+| LVal T_PLUSPLUS {
+    auto ptr = new Tree("UnaryOperator");
+    ptr->addSon($1);
+    $$ = ptr;
+}
+| LVal T_MINUSMINUS {
+    auto ptr = new Tree("UnaryOperator");
+    ptr->addSon($1);
+    $$ = ptr;
+};
+
+UnaryExp: PostfixExp  {
+    $$ = $1;
+}
+| FuncCall {
+    $$ = $1;
+}
+|T_PLUS UnaryExp {
+    auto ptr = new Tree("UnaryOperator");
+    ptr->addSon($2);
+    $$ = ptr;
+}
+| T_MINUS UnaryExp {
+    auto ptr = new Tree("UnaryOperator");
+    ptr->addSon($2);
+    $$ = ptr;
+}
+| T_EXCLAIM UnaryExp {
+    auto ptr = new Tree("UnaryOperator");
+    ptr->addSon($2);
+    $$ = ptr;
+}
+| T_TILDE UnaryExp {
+    auto ptr = new Tree("UnaryOperator");
+    ptr->addSon($2);
+    $$ = ptr;
+}
+|T_PLUSPLUS LVal {
+    auto ptr = new Tree("UnaryOperator");
+    ptr->addSon($2);
+    $$ = ptr;
+}
+| T_MINUSMINUS LVal {
+    auto ptr = new Tree("UnaryOperator");
+    ptr->addSon($2);
+    $$ = ptr;
+};
+
+PrimaryExp: T_NUMERIC_CONSTANT {
+    $$ = $1;
+}
+| T_L_PAREN Exp T_R_PAREN {
+    auto ptr = new Tree("ParenExpr");
+    ptr->addSon($2);
+    $$ = ptr;
+}
+| LVal {
+    auto ptr = new Tree("ImplicitCastExpr");
+    ptr->addSon($1);
+    $$ = ptr;
+};
+
+MulExp : UnaryExp { $$ = $1; }
+| MulExp T_STAR UnaryExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+}
+| MulExp T_SLASH UnaryExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+}
+| MulExp T_PERCENT UnaryExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+};
+
+AddExp : MulExp { $$ = $1; }
+| AddExp T_PLUS MulExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+}
+| AddExp T_MINUS MulExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+};
+
+ShiftExp : AddExp { $$ = $1; }
+| ShiftExp T_LESSLESS AddExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+}
+| ShiftExp T_GREATERGREATER AddExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+};
+
+RelExp : ShiftExp { $$ = $1; }
+| RelExp T_LESS ShiftExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+}
+| RelExp T_GREATER ShiftExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+}
+| RelExp T_LESSEQUAL ShiftExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+}
+| RelExp T_GREATEREQUAL ShiftExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+};
+
+EqExp : RelExp { $$ = $1; }
+| EqExp T_EQUALEQUAL RelExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+}
+| EqExp T_EXCLAIMEQUAL RelExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+};
+
+BAndExp : EqExp { $$ = $1; }
+| BAndExp T_AMP EqExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+};
+
+BXorExp : BAndExp { $$ = $1; }
+| BXorExp T_CARET BAndExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+};
+
+BOrExp : BXorExp { $$ = $1; }
+| BOrExp T_PIPE BXorExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+};
+
+LAndExp : BOrExp { $$ = $1; }
+| LAndExp T_AMPAMP BOrExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+};
+
+LOrExp : LAndExp { $$ = $1; }
+| LOrExp T_PIPEPIPE LAndExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+};
+
+AssignExp : LOrExp {$$ = $1 ;}
+| LVal T_EQUAL LOrExp {
+    auto ptr = new Tree("BinaryOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+}
+| LVal AssignOp LOrExp {
+    auto ptr = new Tree("CompoundAssignOperator");
+    ptr->addSon($1);
+    ptr->addSon($3);
+    $$ = ptr;
+};
+
+AssignOp : T_PLUSEQUAL {}
+| T_MINUSEQUAL {}
+| T_STAREQUAL {}
+| T_SLASHEQUAL {}
+| T_PERCENTEQUAL {}
+| T_AMPEQUAL {}
+| T_CARETEQUAL {}
+| T_PIPEEQUAL {}
+| T_LESSLESSEQUAL {}
+| T_GREATERGREATEREQUAL {};
+
+%%

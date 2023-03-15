@@ -13,7 +13,7 @@ The raw image can be found from <https://www.pixiv.net/artworks/72126656>.
 
 */
 #include <sysu/stdio.h>
-long long wk_puts(const char s[]) {
+long long wk_puts(char s[]) {
   long long i = 0;
   if (s[i])
     do {
