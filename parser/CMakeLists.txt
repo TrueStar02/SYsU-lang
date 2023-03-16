@@ -1,5 +1,6 @@
 find_package(LLVM REQUIRED)
 find_package(BISON REQUIRED)
+include_directories(${PROJECT_SOURCE_DIR}/parser)
 bison_target(parser parser.y main.cc DEFINES_FILE parser.hh)
 add_executable(sysu-parser ${BISON_parser_OUTPUT_SOURCE})
 llvm_map_components_to_libnames(LLVM_LIBS support)

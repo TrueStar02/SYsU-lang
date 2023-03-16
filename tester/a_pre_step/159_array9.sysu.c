@@ -1,10 +1,10 @@
 
-void add(int arr[][3],int n)
+void add(int arr1[][3],int n)
 {
     int x;
     for(x = 0;x < n;x++)
     {
-        arr[x][2] = arr[x][0] + arr[x][1];
+        arr1[x][2] = arr1[x][0] + arr1[x][1];
     }
 }
 
