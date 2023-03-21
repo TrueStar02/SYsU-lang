@@ -1,5 +1,5 @@
 #include <vector>
-
+#include <stack>
 #include <cstdio>
 #include <unordered_map>
 #include <llvm/Support/JSON.h>
@@ -15,10 +15,20 @@ enum Type
     Char,Int,Longlong,Float,Double,Void
 };
 
-
+std::string castlookup(Type a,Type b)
+{
+    if(a < Float & b < Float)
+        return "IntegralCast";
+    if(a < Float & b >= Float)
+        return "IntegralToFloating";
+    if(a >= Float & b < Float)
+        return "FloatingToIntegral";
+    if(a >= Float & b >= Float)
+        return "FloatingCast";
+}
 const char * opstr[34]=
 {   "++","--","+","-","!","~","*","/","%","<<",">>",
-    "<",">","<=",">=","==","!=","&","^","|","&&","||",",",
+    "<",">","<=",">=","==","!=","&","^","|","&","||",",",
     "=","+=","-=","*=","/=","%=","&=","^=","|=","<<=",">>="
 };
 
@@ -52,9 +62,19 @@ class Info
         type(t),isConst(ic){}
 };
 
-typedef std::unordered_map<std::string,Info> SymT;
-SymT symt;
-Info curret;
+typedef std::unordered_map<std::string,DeclTree *> SymT;
+
+class SymTNode
+{
+    public:
+        SymT symt;
+        SymTNode * father;
+        std::vector<SymTNode *> sons;
+};
+
+SymTNode * cursym;
+FuncDeclTree * curfunc;
+std::stack<LoopStmtTree *> curloops;
 
 class Visitor
 {
@@ -97,6 +117,7 @@ class Tree
         bool forceRight(ExprTree *& ptr);
         virtual void accept( Visitor* visitor ) {}
         virtual void SematicAnalysis(){};
+        virtual std::string getinfo(){}
         virtual ~Tree(){}
 };
 
@@ -125,7 +146,8 @@ class DeclStmtTree : public StmtTree
             sons.emplace_back(son);
             return retval;
         }
-        void SpreadType(Type type);        
+        void SpreadType(Type type);   
+        virtual void SematicAnalysis();  
 };
 
 class NullStmtTree: public StmtTree 
@@ -137,6 +159,7 @@ class NullStmtTree: public StmtTree
         {
             visitor -> VisitNullStmtTree(this);
         }
+        virtual void SematicAnalysis(){}
 };
 
 class ExprStmtTree: public StmtTree 
@@ -148,12 +171,15 @@ class ExprStmtTree: public StmtTree
         {
             visitor -> VisitExprStmtTree(this);
         }
+        virtual void SematicAnalysis();
         ExprTree * expr;
 };
 
 class BlockStmtTree: public StmtTree
 {
     public:
+        SymTNode symtnode;
+        bool processed = 0;
         BlockStmtTree(std::string kind="", std::string name="", std::string value=""):
             StmtTree(kind,name,value){}
         virtual void accept( Visitor* visitor )
@@ -167,6 +193,7 @@ class BlockStmtTree: public StmtTree
             sons.emplace_back(son);
             return retval;
         }
+        virtual void SematicAnalysis();
 
 };
 
@@ -182,6 +209,7 @@ class IfStmtTree: public StmtTree
         ExprTree * cond;
         StmtTree * truestmt;
         StmtTree * falsestmt;
+        virtual void SematicAnalysis();
 
 };
 
@@ -203,6 +231,7 @@ class WhileStmtTree: public LoopStmtTree
         }
         ExprTree * cond;
         StmtTree * stmt;
+        virtual void SematicAnalysis();
 };
 
 class DoStmtTree: public LoopStmtTree
@@ -216,6 +245,7 @@ class DoStmtTree: public LoopStmtTree
         }
         StmtTree * stmt;
         ExprTree * cond;
+        virtual void SematicAnalysis();
 };
 
 class ForStmtTree: public LoopStmtTree
@@ -232,6 +262,7 @@ class ForStmtTree: public LoopStmtTree
         ExprTree * cond;
         ExprTree * incr;
         StmtTree * stmt;
+        virtual void SematicAnalysis();
 };
 
 class JumpStmtTree : public StmtTree
@@ -251,6 +282,7 @@ class ContinueStmtTree: public JumpStmtTree
             visitor -> VisitContinueStmtTree(this);
         }
         LoopStmtTree * loop;
+        virtual void SematicAnalysis();
 };
 
 class BreakStmtTree: public JumpStmtTree
@@ -263,6 +295,7 @@ class BreakStmtTree: public JumpStmtTree
             visitor -> VisitBreakStmtTree(this);
         }
         LoopStmtTree * loop;
+        virtual void SematicAnalysis();
 };
 
 class ReturnStmtTree: public JumpStmtTree
@@ -276,12 +309,15 @@ class ReturnStmtTree: public JumpStmtTree
         }
         FuncDeclTree * func;
         ExprTree * expr;
+        void RetAdjust();
+        virtual void SematicAnalysis();
 };
 
 class TranslationUnitTree: public Tree
 {
     public:
         std::vector<Tree *> sons;
+        SymTNode symtnode;
         TranslationUnitTree (std::string kind="", std::string name="", std::string value=""):
             Tree(kind,name,value){}
         virtual void accept( Visitor* visitor )
@@ -302,7 +338,7 @@ class TranslationUnitTree: public Tree
             {
                 auto ptr = dynamic_cast<TranslationUnitTree *>(son);
                 for (auto ptrson:ptr -> sons)
-                sons.emplace_back(ptrson); 
+                    sons.emplace_back(ptrson); 
             }
             
             else
@@ -311,8 +347,8 @@ class TranslationUnitTree: public Tree
                 for (auto ptrson:ptr -> sons)
                 sons.emplace_back(ptrson); 
             }
-            
         }
+        virtual void SematicAnalysis();
 };
 
 class DeclTree :public Tree
@@ -321,6 +357,24 @@ class DeclTree :public Tree
         Info info;
         DeclTree (std::string kind="", std::string name="", std::string value=""):
             Tree(kind,name,value){}
+        virtual std::string getinfo()
+        {
+            std::string str;
+            if(info.isConst)
+                str += "const ";
+            str += typestr[info.type];
+            if(info.layer.num)
+            {
+                for(int num:info.layer.len)
+                {
+                    str += "[";
+                    str += std::to_string(num);
+                    str += "]";
+                }
+            }
+            return str;  
+        }
+        
 
 };
 
@@ -334,6 +388,8 @@ class VarDeclTree : public DeclTree
         {
             visitor -> VisitVarDeclTree(this);
         }
+        void DeclAdjust();
+        virtual void SematicAnalysis();
 };
 
 class FuncDeclTree: public DeclTree
@@ -358,11 +414,38 @@ class FuncDeclTree: public DeclTree
             sons.emplace_back(son);
             return retval;
         }
-        
+        virtual void SematicAnalysis();
+        virtual std::string getinfo()
+        {
+            std::string str = DeclTree::getinfo();
+            if(info.args.size())
+            {
+                
+                str += "(";
+                for(Info arg:info.args)
+                {
+                    if(arg.isConst)
+                        str += "const ";
+                    str += typestr[arg.type];
+                    if(arg.layer.num)
+                    {
+                        for(int num1:arg.layer.len)
+                        {
+                            str += "[";
+                            str += std::to_string(num1);
+                            str += "]";
+                        }
+                    }
+                    str += ",";
+                }
+                str[str.length() - 1] = ')';
+            }
+            else
+                str += "()";
+            //yyerror(str);
+            return str;
+        }
 };
-
-
-
 
 class ExprTree : public Tree
 {
@@ -371,6 +454,23 @@ class ExprTree : public Tree
         bool isLeftVal;
         ExprTree (std::string kind="", std::string name="", std::string value=""):
             Tree(kind,name,value){}
+        virtual std::string getinfo()
+        {
+            std::string str;
+            if(info.isConst)
+                str += "const ";
+            str += typestr[info.type];
+            if(info.layer.num)
+            {
+                for(int num:info.layer.len)
+                {
+                    str += "[";
+                    str += std::to_string(num);
+                    str += "]";
+                }
+            }
+            return str;         
+        }
 };
 
 class LiteralTree : public ExprTree
@@ -382,6 +482,7 @@ class LiteralTree : public ExprTree
         {
             visitor -> VisitLiteralTree(this);
         }
+        virtual void SematicAnalysis(){}
 };
 
 class ParenExprTree : public ExprTree
@@ -394,7 +495,7 @@ class ParenExprTree : public ExprTree
         {
             visitor -> VisitParenExprTree(this);
         }
-        
+        virtual void SematicAnalysis();
 };
 
 class InitListExprTree :public ExprTree
@@ -406,6 +507,7 @@ class InitListExprTree :public ExprTree
         {
             visitor -> VisitInitListExprTree(this);
         }
+        virtual void SematicAnalysis(){}
 };
 
 class ImplicitCastExprTree : public ExprTree 
@@ -419,7 +521,7 @@ class ImplicitCastExprTree : public ExprTree
         {
             visitor -> VisitImplicitCastExprTree(this);
         }
-        
+        virtual void SematicAnalysis();
 };
 
 class ArraySubscriptExprTree:public ExprTree
@@ -433,7 +535,7 @@ class ArraySubscriptExprTree:public ExprTree
         {
             visitor -> VisitArraySubscriptExprTree(this);
         }
-
+        virtual void SematicAnalysis();
 };
 
 class DeclRefTree : public ExprTree
@@ -446,6 +548,7 @@ class DeclRefTree : public ExprTree
         {
             visitor -> VisitDeclRefTree(this);
         }
+        virtual void SematicAnalysis();
 };
 
 class UnaryExprTree : public ExprTree
@@ -460,6 +563,7 @@ class UnaryExprTree : public ExprTree
         {
             visitor -> VisitUnaryExprTree(this);
         }
+        virtual void SematicAnalysis();
 };
 
 class BinaryExprTree : public ExprTree
@@ -474,6 +578,9 @@ class BinaryExprTree : public ExprTree
         {
             visitor -> VisitBinaryExprTree(this);
         }
+        void TryUpcast();
+        void AssignAdjust();
+        virtual void SematicAnalysis();
 };
 
 class TernaryExprTree : public ExprTree
@@ -507,8 +614,9 @@ class FuncCallTree : public ExprTree
             para.emplace_back(son);
             return retval;
         }
+        virtual void SematicAnalysis();
+        void AdjustParaType();
 };
-
 bool Tree::forceRight(ExprTree *& ptr)
 {
     if(ptr -> isLeftVal)
@@ -530,7 +638,334 @@ void DeclStmtTree::SpreadType(Type type)
 
 }
 
+void ExprStmtTree::SematicAnalysis()
+{
+    expr -> SematicAnalysis();
+}
 
+void DeclStmtTree::SematicAnalysis()
+{
+    for(auto son:sons)
+        son -> SematicAnalysis();
+}  
+
+void BlockStmtTree::SematicAnalysis()
+{
+    if(!processed)
+    {
+        cursym -> sons.push_back(&symtnode);
+        symtnode.father = cursym;
+        cursym = &symtnode;
+        processed = 1;
+    }
+
+    for(auto son:sons)
+        son -> SematicAnalysis();
+
+    cursym = symtnode.father;
+}
+
+void IfStmtTree::SematicAnalysis()
+{
+    cond -> SematicAnalysis();
+    forceRight(cond);
+    truestmt -> SematicAnalysis();
+    if(falsestmt)
+        falsestmt -> SematicAnalysis();
+}
+
+void DoStmtTree::SematicAnalysis()
+{
+    curloops.push(this);
+    stmt -> SematicAnalysis();
+    cond -> SematicAnalysis();
+    forceRight(cond);
+    curloops.pop();
+}
+
+void WhileStmtTree::SematicAnalysis()
+{
+    curloops.push(this);
+    cond -> SematicAnalysis();
+    forceRight(cond);
+    stmt -> SematicAnalysis();
+    curloops.pop();
+}
+
+void ForStmtTree::SematicAnalysis()
+{
+    curloops.push(this);
+    init -> SematicAnalysis();
+    cond -> SematicAnalysis();
+    forceRight(cond);
+    incr -> SematicAnalysis();
+    stmt -> SematicAnalysis();
+    curloops.pop();
+}
+
+void ContinueStmtTree::SematicAnalysis()
+{
+    loop = curloops.top();
+}
+
+void BreakStmtTree::SematicAnalysis()
+{
+    loop = curloops.top();
+}
+
+void ReturnStmtTree::RetAdjust()
+{
+    if(expr -> info.type != curfunc -> info.type)
+    {
+        auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
+        tmp -> cast = expr;
+        tmp -> isLeftVal = expr -> isLeftVal;
+        tmp -> info.type = curfunc -> info.type;
+        tmp -> info.layer = curfunc -> info.layer;
+        tmp -> castkind = castlookup(expr -> info.type,curfunc -> info.type);
+        expr = tmp;
+    }
+}
+void ReturnStmtTree::SematicAnalysis()
+{
+    func = curfunc;
+    if(expr)
+    {
+        expr -> SematicAnalysis();
+        forceRight(expr);
+        RetAdjust();
+    }
+}
+
+void ParenExprTree::SematicAnalysis()
+{
+    son->SematicAnalysis();
+    info = son->info;
+    isLeftVal = son->isLeftVal;
+}
+
+void TranslationUnitTree::SematicAnalysis()
+{
+    cursym = &symtnode;
+    symtnode.father = nullptr;
+    for (auto son:sons)
+        son -> SematicAnalysis();
+}
+
+void VarDeclTree::DeclAdjust()
+{
+    if (info.type != initval->info.type)
+    {
+        auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
+        tmp->cast = initval;
+        tmp->isLeftVal = initval->isLeftVal;
+        tmp->info = info;
+        tmp->castkind = (castlookup(initval->info.type, info.type));
+        initval = tmp;
+    }
+}
+
+void VarDeclTree::SematicAnalysis()
+{
+    cursym->symt.insert(std::make_pair(name, this));
+    if (initval)
+    {
+        initval->SematicAnalysis();
+        forceRight(initval);
+        DeclAdjust();
+    }
+}
+
+void FuncDeclTree::SematicAnalysis()
+{
+    cursym->symt.insert(std::make_pair(name, this));
+    if (body)
+    {
+        curfunc = this;
+        cursym->sons.push_back(&(body->symtnode));
+        body->symtnode.father = cursym;
+        cursym = &(body->symtnode);
+        body->processed = 1;
+        for (auto son : sons)
+            son->SematicAnalysis();
+        body->SematicAnalysis();
+    }
+}
+
+void ImplicitCastExprTree::SematicAnalysis()
+{
+    cast->SematicAnalysis();
+    info = cast->info;
+}
+
+void ArraySubscriptExprTree::SematicAnalysis()
+{
+    sym->SematicAnalysis();
+    script->SematicAnalysis();
+    forceRight(script);
+    info = sym->info;
+    info.layer.pop_back();
+}
+
+void DeclRefTree::SematicAnalysis()
+{
+    SymTNode *temp = cursym;
+    while (cursym)
+    {
+        if (temp->symt.find(name) != temp->symt.end())
+        {
+            decl = temp->symt[name];
+            break;
+        }
+        temp = temp->father;
+    }
+    info = decl->info;
+    isLeftVal = 1;
+}
+
+void UnaryExprTree::SematicAnalysis()
+{
+    son->SematicAnalysis();
+    if (opcode >= OP_PLUS)
+        forceRight(son);
+    info = son->info;
+    isLeftVal = son->isLeftVal;
+}
+
+void BinaryExprTree::TryUpcast()
+{
+    if (left->info.type == right->info.type)
+    {
+        info = left->info;
+    }
+    else if (left->info.type > right->info.type)
+    {
+        auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
+        tmp->cast = right;
+        tmp->isLeftVal = right->isLeftVal;
+        tmp->info = left->info;
+        tmp->castkind = castlookup(right->info.type, left->info.type);
+        right = tmp;
+        info = left->info;
+    }
+    else
+    {
+        auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
+        tmp->cast = left;
+        tmp->isLeftVal = left->isLeftVal;
+        tmp->info = right->info;
+        tmp->castkind = castlookup(left->info.type, right->info.type);
+        left = tmp;
+        info = right->info;
+    }
+}
+void BinaryExprTree::AssignAdjust()
+{
+    if (left->info.type != right->info.type)
+    {
+        auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
+        tmp->cast = right;
+        tmp->isLeftVal = right->isLeftVal;
+        tmp->info = left->info;
+        tmp->castkind = castlookup(right->info.type, left->info.type);
+        right = tmp;
+        
+    }
+    info = left->info;
+}
+void BinaryExprTree::SematicAnalysis()
+{
+    left->SematicAnalysis();
+    right->SematicAnalysis();
+    if (opcode <= OP_PIPE)
+    {
+        forceRight(left);
+        forceRight(right);
+        TryUpcast();
+        isLeftVal = 0;
+    }
+    else if (opcode <= OP_PIPEPIPE)
+    {
+        forceRight(left);
+        forceRight(right);
+        info.type = Int;
+        isLeftVal = 0;
+    }
+    else if (opcode == OP_COMMA)
+    {
+        info = right->info;
+        isLeftVal = right->isLeftVal;
+    }
+    else
+    {
+        forceRight(right);
+        AssignAdjust();
+        isLeftVal = left->isLeftVal;
+    }
+}
+
+void FuncCallTree::SematicAnalysis()
+{
+    iden->SematicAnalysis();
+    info.type = iden->info.type;
+    isLeftVal = 0;
+    for (auto son : para)
+    {
+        son->SematicAnalysis();
+    }
+    AdjustParaType();
+}
+void FuncCallTree::AdjustParaType()
+{
+    int size = iden->info.args.size();
+    for (int i = 0; i < size; i++)
+    {
+
+        if (iden->info.args[i].layer.num > 0)
+        {
+            auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
+            tmp->castkind = "FunctionToPointerDecay";
+            tmp->cast = para[i];
+            tmp->isLeftVal = para[i]->isLeftVal;
+            tmp->info = para[i]->info;
+            para[i] = tmp;
+
+            if (iden->info.args[i].type != para[i]->info.type)
+            {
+                    auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
+                    tmp->castkind = castlookup(para[i]->info.type, iden->info.args[i].type);
+                    tmp->cast = para[i];
+                    tmp->isLeftVal = para[i]->isLeftVal;
+                    tmp->info = iden->info.args[i];
+                    para[i] = tmp;
+            }
+
+            else if (iden->info.args[i].isConst & !(para[i]->info.isConst))
+            {
+                    auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
+                    tmp->castkind = "NoOp";
+                    tmp->cast = para[i];
+                    tmp->isLeftVal = para[i]->isLeftVal;
+                    tmp->info = iden->info.args[i];
+                    para[i] = tmp;
+            }
+        }
+        else 
+        {
+            forceRight(para[i]);
+            if (iden->info.args[i].type != para[i]->info.type)
+            {
+                auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
+                tmp->castkind = castlookup(para[i]->info.type, iden->info.args[i].type);
+                tmp->cast = para[i];
+                tmp->isLeftVal = para[i]->isLeftVal;
+                tmp->info = iden->info.args[i];
+                para[i] = tmp;
+            }
+        }
+        
+    }
+}
 
 class Print: public Visitor
 {
@@ -540,8 +975,7 @@ class Print: public Visitor
             yyerror("|");
             for(int i = 0;i < depth; ++i) 
                 yyerror(" ");
-            yyerror("-" + tree -> kind + " " + tree -> name + " " + tree -> value);
-            yyerror("\n");
+            yyerror("-" + tree -> kind + " " + tree -> name + " " + tree -> value + " ");
         }
     int depth = 0;
     public:
@@ -549,7 +983,8 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(translationUnitTree);
-            for(auto && it :translationUnitTree -> sons)
+            yyerror("\n");
+            for(auto & it :translationUnitTree -> sons)
                 it -> accept(this);
             depth --;
         }
@@ -557,6 +992,8 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(varDeclTree);
+            yyerror(varDeclTree -> getinfo());
+            yyerror("\n");
             if(varDeclTree -> initval)
                 varDeclTree -> initval -> accept(this);
             depth --;
@@ -565,7 +1002,9 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(funcDeclTree);
-            for(auto && it :funcDeclTree -> sons)
+            yyerror(funcDeclTree -> getinfo());
+            yyerror("\n");
+            for(auto & it :funcDeclTree -> sons)
                 it -> accept(this);
             if(funcDeclTree -> body)
                 funcDeclTree -> body -> accept(this);
@@ -575,7 +1014,8 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(declStmtTree);
-            for(auto && it :declStmtTree -> sons)
+            yyerror("\n");
+            for(auto & it :declStmtTree -> sons)
                 it -> accept(this);
             depth --;
         }
@@ -583,6 +1023,7 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(nullStmtTree);
+            yyerror("\n");
             depth --;
         }
         virtual void VisitExprStmtTree(ExprStmtTree * exprStmtTree)
@@ -593,7 +1034,8 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(blockStmtTree);
-            for(auto && it :blockStmtTree -> sons)
+            yyerror("\n");
+            for(auto & it :blockStmtTree -> sons)
                 it -> accept(this);
             depth --;
         }
@@ -601,6 +1043,7 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(ifStmtTree);
+            yyerror("\n");
             ifStmtTree -> cond -> accept(this);
             ifStmtTree -> truestmt -> accept(this);
             if(ifStmtTree -> falsestmt)
@@ -611,6 +1054,7 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(whileStmtTree);
+            yyerror("\n");
             whileStmtTree -> cond -> accept(this);
             whileStmtTree -> stmt -> accept(this);
             depth --;
@@ -619,6 +1063,7 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(doStmtTree);
+            yyerror("\n");
             doStmtTree -> stmt -> accept(this);
             doStmtTree -> cond -> accept(this);
             depth --;
@@ -627,6 +1072,7 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(forStmtTree);
+            yyerror("\n");
             forStmtTree -> init -> accept(this);
             yyerror('\n');
             forStmtTree -> cond -> accept(this);
@@ -638,18 +1084,21 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(continueStmtTree);
+            yyerror("\n");
             depth --;
         }
         virtual void VisitBreakStmtTree(BreakStmtTree * breakStmtTree)
         {
             depth ++;
             printbasic(breakStmtTree);
+            yyerror("\n");
             depth --;            
         }
         virtual void VisitReturnStmtTree(ReturnStmtTree * returnStmtTree)
         {
             depth ++;
             printbasic(returnStmtTree);
+            yyerror("\n");
             if(returnStmtTree -> expr)
                 returnStmtTree -> expr -> accept(this);
             depth --;
@@ -658,12 +1107,16 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(literalTree);
+            yyerror(literalTree -> getinfo());
+            yyerror("\n");
             depth --;  
         }
         virtual void VisitParenExprTree(ParenExprTree * parenExprTree)
         {
             depth ++;
             printbasic(parenExprTree);
+            yyerror(parenExprTree -> getinfo());
+            yyerror("\n");
             parenExprTree -> son -> accept(this);
             depth --;
         }
@@ -671,12 +1124,18 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(initListExprTree);
+            yyerror(initListExprTree -> getinfo());
+            yyerror("\n");
             depth --;  
         }
         virtual void VisitImplicitCastExprTree(ImplicitCastExprTree * implicitCastExprTree)
         {
             depth ++;
             printbasic(implicitCastExprTree);
+            yyerror(implicitCastExprTree -> getinfo());
+            yyerror(" ");
+            yyerror(implicitCastExprTree -> castkind);
+            yyerror("\n");
             implicitCastExprTree -> cast -> accept(this);
             depth --;
         }
@@ -684,6 +1143,8 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(arraySubscriptExprTree);
+            yyerror(arraySubscriptExprTree -> getinfo());
+            yyerror("\n");
             arraySubscriptExprTree -> sym -> accept(this);
             arraySubscriptExprTree -> script -> accept(this);
             depth --;
@@ -692,12 +1153,16 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(declRefTree);
+            yyerror(declRefTree -> getinfo());
+            yyerror("\n");
             depth --; 
         }
         virtual void VisitUnaryExprTree(UnaryExprTree * unaryExprTree)
         {
             depth ++;
             printbasic(unaryExprTree);
+            yyerror(unaryExprTree -> getinfo());
+            yyerror("\n");
             unaryExprTree -> son -> accept(this);
             depth --;
         }
@@ -705,6 +1170,8 @@ class Print: public Visitor
         {   
             depth ++;
             printbasic(binaryExprTree);
+            yyerror(binaryExprTree -> getinfo());
+            yyerror("\n");
             binaryExprTree -> left -> accept(this);
             binaryExprTree -> right -> accept(this);
             depth --;
@@ -713,6 +1180,8 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(ternaryExprTree);
+            yyerror(ternaryExprTree -> getinfo());
+            yyerror("\n");
             ternaryExprTree -> condexp -> accept(this);
             ternaryExprTree -> trueexp -> accept(this);
             ternaryExprTree -> falseexp -> accept(this);
@@ -722,38 +1191,26 @@ class Print: public Visitor
         {
             depth ++;
             printbasic(funcCallTree);
+            yyerror(funcCallTree -> getinfo());
+            yyerror("\n");
             funcCallTree -> iden -> accept(this);
-            for(auto && it :funcCallTree -> para)
+            for(auto & it :funcCallTree -> para)
                 it -> accept(this);
             depth --;
         }
 };
 
-/*
 
-llvm::json::Value toJson() const 
-    {
-        llvm::json::Object tmp{
-        {"kind", kind},
-        {"name", name},
-        {"value", value},
-        {"type",GetType()},
-        //{"opcode",opstr[opcode]},
-        {"z-childs",GetChild()},
-        {"lVal",(isLeftVal ? "True" : "False")},
-        {"inner", llvm::json::Array{}}
-        };
-        for(auto&& it: sons) tmp.get("inner")->getAsArray()->push_back(it->toJson());
-        return tmp;
-    }
 
-*/
+llvm::json::Value tov(llvm::json::Object o){return o;}
+
 
 class ToJson:public Visitor
 {
     public:
         virtual void VisitTranslationUnitTree(TranslationUnitTree *  translationUnitTree)
         {
+           yyerror("a"); 
             translationUnitTree -> temp = new llvm::json::Object
             {
                 {"kind", translationUnitTree -> kind},
@@ -761,15 +1218,16 @@ class ToJson:public Visitor
                 {"value", translationUnitTree -> value},
                 {"inner", llvm::json::Array{}}
             };
-            for(auto&& it: translationUnitTree -> sons) 
+            for(auto& it: translationUnitTree -> sons) 
             {
                 it -> accept(this);
-                translationUnitTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(it->temp)));
+                translationUnitTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(it->temp)));
             }
                 
         }
         virtual void VisitVarDeclTree(VarDeclTree * varDeclTree)
         {
+            yyerror("b");
             varDeclTree -> temp = new llvm::json::Object
             {
                 {"kind", varDeclTree -> kind},
@@ -780,11 +1238,12 @@ class ToJson:public Visitor
              if(varDeclTree -> initval)
             {
                 varDeclTree -> initval -> accept(this);
-                varDeclTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(varDeclTree -> initval -> temp)));
+                varDeclTree -> temp  -> get("inner")->getAsArray()->push_back(tov(*(varDeclTree -> initval -> temp)));
             }
         }
         virtual void VisitFuncDeclTree(FuncDeclTree * funcDeclTree)
         {
+            yyerror("c");
             funcDeclTree -> temp = new llvm::json::Object
             {
                 {"kind", funcDeclTree -> kind},
@@ -792,19 +1251,22 @@ class ToJson:public Visitor
                 {"value", funcDeclTree -> value},
                 {"inner", llvm::json::Array{}}
             };
-            for(auto && it :funcDeclTree -> sons)
+            for(auto & it :funcDeclTree -> sons)
             {   
                 it -> accept(this);
-                funcDeclTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(it->temp)));
+                funcDeclTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(it->temp)));
             }
+            
             if(funcDeclTree -> body)
             {   
                 funcDeclTree -> body -> accept(this);
-                funcDeclTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(funcDeclTree -> body -> temp)));
+                funcDeclTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(funcDeclTree -> body -> temp)));
             }
+            
         }
         virtual void VisitDeclStmtTree(DeclStmtTree * declStmtTree)
         {
+            yyerror("d");
             declStmtTree -> temp = new llvm::json::Object
             {
                 {"kind", declStmtTree -> kind},
@@ -812,14 +1274,15 @@ class ToJson:public Visitor
                 {"value", declStmtTree -> value},
                 {"inner", llvm::json::Array{}}
             };
-            for(auto && it :declStmtTree -> sons)
+            for(auto & it :declStmtTree -> sons)
             {   
                 it -> accept(this);
-                declStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(it->temp)));
+                declStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(it->temp)));
             }
         }
         virtual void VisitNullStmtTree(NullStmtTree * nullStmtTree)
         {
+            yyerror("e");
             nullStmtTree -> temp = new llvm::json::Object
             {
                 {"kind", nullStmtTree -> kind},
@@ -830,11 +1293,13 @@ class ToJson:public Visitor
         }
         virtual void VisitExprStmtTree(ExprStmtTree * exprStmtTree)
         {
+            yyerror("f");
             exprStmtTree -> expr -> accept(this);
             exprStmtTree -> temp = exprStmtTree -> expr -> temp;
         }
         virtual void VisitBlockStmtTree(BlockStmtTree * blockStmtTree)
         {
+            yyerror("g");
             blockStmtTree -> temp = new llvm::json::Object
             {
                 {"kind", blockStmtTree -> kind},
@@ -842,15 +1307,16 @@ class ToJson:public Visitor
                 {"value", blockStmtTree -> value},
                 {"inner", llvm::json::Array{}}
             };
-            for(auto && it :blockStmtTree -> sons)
+            for(auto & it :blockStmtTree -> sons)
             {   
                 it -> accept(this);
-                blockStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(it->temp)));
+                blockStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(it->temp)));
             }
            
         }
         virtual void VisitIfStmtTree(IfStmtTree * ifStmtTree)
         {
+            yyerror("h");
             ifStmtTree -> temp = new llvm::json::Object
             {
                 {"kind", ifStmtTree -> kind},
@@ -859,18 +1325,19 @@ class ToJson:public Visitor
                 {"inner", llvm::json::Array{}}
             };
             ifStmtTree -> cond -> accept(this);
-            ifStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(ifStmtTree -> cond->temp)));
+            ifStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(ifStmtTree -> cond->temp)));
             ifStmtTree -> truestmt -> accept(this);
-            ifStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(ifStmtTree -> truestmt->temp)));
+            ifStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(ifStmtTree -> truestmt->temp)));
             if(ifStmtTree -> falsestmt)
             {   
                 ifStmtTree -> falsestmt -> accept(this);
-                ifStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(ifStmtTree -> falsestmt->temp)));
+                ifStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(ifStmtTree -> falsestmt->temp)));
             }
             
         }
         virtual void VisitWhileStmtTree(WhileStmtTree * whileStmtTree)
         {
+            yyerror("i");
             whileStmtTree -> temp = new llvm::json::Object
             {
                 {"kind", whileStmtTree -> kind},
@@ -879,12 +1346,13 @@ class ToJson:public Visitor
                 {"inner", llvm::json::Array{}}
             };
             whileStmtTree -> cond -> accept(this);
-            whileStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(whileStmtTree -> cond->temp)));
+            whileStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(whileStmtTree -> cond->temp)));
             whileStmtTree -> stmt -> accept(this);
-            whileStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(whileStmtTree -> stmt->temp)));
+            whileStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(whileStmtTree -> stmt->temp)));
         }
         virtual void VisitDoStmtTree(DoStmtTree * doStmtTree)
         {
+            yyerror("j");
             doStmtTree -> temp = new llvm::json::Object
             {
                 {"kind", doStmtTree -> kind},
@@ -892,13 +1360,18 @@ class ToJson:public Visitor
                 {"value", doStmtTree -> value},
                 {"inner", llvm::json::Array{}}
             };
+            
             doStmtTree -> stmt -> accept(this);
-            doStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(doStmtTree -> cond->temp)));
+            
+            doStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(doStmtTree -> stmt->temp)));
+            
             doStmtTree -> cond -> accept(this);
-            doStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(doStmtTree -> cond->temp)));
+            doStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(doStmtTree -> cond->temp)));
+            
         }
         virtual void VisitForStmtTree(ForStmtTree * forStmtTree)
         {
+            yyerror("k");
             forStmtTree -> temp = new llvm::json::Object
             {
                 {"kind", forStmtTree -> kind},
@@ -907,17 +1380,18 @@ class ToJson:public Visitor
                 {"inner", llvm::json::Array{}}
             };
             forStmtTree -> init -> accept(this);
-            forStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(forStmtTree -> init -> temp)));
-            forStmtTree -> temp -> get("inner")->getAsArray()->push_back(llvm::json::Object{{}});
+            forStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(forStmtTree -> init -> temp)));
+            forStmtTree -> temp ->get("inner")->getAsArray()->push_back(llvm::json::Object{{}});
             forStmtTree -> cond -> accept(this);
-            forStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(forStmtTree -> cond -> temp)));
+            forStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(forStmtTree -> cond -> temp)));
             forStmtTree -> incr -> accept(this);
-            forStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(forStmtTree -> incr -> temp)));
+            forStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(forStmtTree -> incr -> temp)));
             forStmtTree -> stmt -> accept(this);
-            forStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(forStmtTree -> stmt -> temp)));
+            forStmtTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(forStmtTree -> stmt -> temp)));
         }
         virtual void VisitContinueStmtTree(ContinueStmtTree * continueStmtTree)
         {
+            yyerror("l");
             continueStmtTree -> temp = new llvm::json::Object
             {
                 {"kind", continueStmtTree -> kind},
@@ -928,6 +1402,7 @@ class ToJson:public Visitor
         }
         virtual void VisitBreakStmtTree(BreakStmtTree * breakStmtTree)
         {
+            yyerror("m");
             breakStmtTree -> temp = new llvm::json::Object
             {
                 {"kind", breakStmtTree -> kind},
@@ -938,6 +1413,7 @@ class ToJson:public Visitor
         }
         virtual void VisitReturnStmtTree(ReturnStmtTree * returnStmtTree)
         {
+            yyerror("n");
             returnStmtTree -> temp = new llvm::json::Object
             {
                 {"kind", returnStmtTree -> kind},
@@ -948,11 +1424,14 @@ class ToJson:public Visitor
             if(returnStmtTree -> expr)
             {
                 returnStmtTree -> expr -> accept(this);
-                returnStmtTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(returnStmtTree -> expr -> temp)));
+                //
+                returnStmtTree -> temp ->  get("inner")-> getAsArray()->push_back(tov(*(returnStmtTree -> expr -> temp)));
+            
             }
         }
         virtual void VisitLiteralTree(LiteralTree * literalTree)
         {
+            yyerror("o");
             literalTree -> temp = new llvm::json::Object
             {
                 {"kind", literalTree -> kind},
@@ -960,9 +1439,11 @@ class ToJson:public Visitor
                 {"value", literalTree -> value},
                 {"inner", llvm::json::Array{}}
             };  
+            
         }
         virtual void VisitParenExprTree(ParenExprTree * parenExprTree)
         {
+            yyerror("p");
             parenExprTree -> temp = new llvm::json::Object
             {
                 {"kind", parenExprTree -> kind},
@@ -971,10 +1452,11 @@ class ToJson:public Visitor
                 {"inner", llvm::json::Array{}}
             }; 
             parenExprTree -> son -> accept(this);
-            parenExprTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(parenExprTree -> son -> temp)));
+            parenExprTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(parenExprTree -> son -> temp)));
         }
         virtual void VisitInitListExprTree(InitListExprTree * initListExprTree)
         {
+            yyerror("q");
             initListExprTree -> temp = new llvm::json::Object
             {
                 {"kind", initListExprTree -> kind},
@@ -985,6 +1467,7 @@ class ToJson:public Visitor
         }
         virtual void VisitImplicitCastExprTree(ImplicitCastExprTree * implicitCastExprTree)
         {
+            yyerror("r");
             implicitCastExprTree -> temp = new llvm::json::Object
             {
                 {"kind", implicitCastExprTree -> kind},
@@ -993,10 +1476,11 @@ class ToJson:public Visitor
                 {"inner", llvm::json::Array{}}
             };  
             implicitCastExprTree -> cast -> accept(this);
-            implicitCastExprTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(implicitCastExprTree -> cast -> temp)));
+            implicitCastExprTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(implicitCastExprTree -> cast -> temp)));
         }
         virtual void VisitArraySubscriptExprTree(ArraySubscriptExprTree * arraySubscriptExprTree)
         {
+            yyerror("s");
             arraySubscriptExprTree -> temp = new llvm::json::Object
             {
                 {"kind", arraySubscriptExprTree -> kind},
@@ -1005,12 +1489,13 @@ class ToJson:public Visitor
                 {"inner", llvm::json::Array{}}
             };  
             arraySubscriptExprTree -> sym -> accept(this);
-            arraySubscriptExprTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*( arraySubscriptExprTree -> sym -> temp)));
+            arraySubscriptExprTree -> temp ->get("inner")->getAsArray()->push_back(tov(*( arraySubscriptExprTree -> sym -> temp)));
             arraySubscriptExprTree -> script -> accept(this);
-            arraySubscriptExprTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(arraySubscriptExprTree -> script -> temp)));
+            arraySubscriptExprTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(arraySubscriptExprTree -> script -> temp)));
         }
         virtual void VisitDeclRefTree(DeclRefTree * declRefTree)
         {
+            yyerror("t");
             declRefTree -> temp = new llvm::json::Object
             {
                 {"kind", declRefTree -> kind},
@@ -1021,6 +1506,7 @@ class ToJson:public Visitor
         }
         virtual void VisitUnaryExprTree(UnaryExprTree * unaryExprTree)
         {
+            yyerror("u");
             unaryExprTree -> temp = new llvm::json::Object
             {
                 {"kind", unaryExprTree -> kind},
@@ -1029,10 +1515,11 @@ class ToJson:public Visitor
                 {"inner", llvm::json::Array{}}
             }; 
             unaryExprTree -> son -> accept(this);
-            unaryExprTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(unaryExprTree -> son -> temp)));
+            unaryExprTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(unaryExprTree -> son -> temp)));
         }
         virtual void VisitBinaryExprTree(BinaryExprTree * binaryExprTree)
         {   
+            yyerror("v");
             binaryExprTree -> temp = new llvm::json::Object
             {
                 {"kind", binaryExprTree -> kind},
@@ -1041,13 +1528,14 @@ class ToJson:public Visitor
                 {"inner", llvm::json::Array{}}
             }; 
             binaryExprTree -> left -> accept(this);
-            binaryExprTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(binaryExprTree -> left -> temp)));
+            binaryExprTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(binaryExprTree -> left -> temp)));
             binaryExprTree -> right -> accept(this);
-            binaryExprTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(binaryExprTree -> right -> temp)));
+            binaryExprTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(binaryExprTree -> right -> temp)));
     
         }
         virtual void VisitTernaryExprTree(TernaryExprTree * ternaryExprTree)
         {
+            yyerror("w");
             ternaryExprTree -> temp = new llvm::json::Object
             {
                 {"kind", ternaryExprTree -> kind},
@@ -1056,14 +1544,15 @@ class ToJson:public Visitor
                 {"inner", llvm::json::Array{}}
             }; 
             ternaryExprTree -> condexp -> accept(this);
-            ternaryExprTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(ternaryExprTree -> condexp -> temp)));
+            ternaryExprTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(ternaryExprTree -> condexp -> temp)));
             ternaryExprTree -> trueexp -> accept(this);
-            ternaryExprTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(ternaryExprTree -> trueexp -> temp)));
+            ternaryExprTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(ternaryExprTree -> trueexp -> temp)));
             ternaryExprTree -> falseexp -> accept(this);
-            ternaryExprTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(ternaryExprTree -> falseexp -> temp)));
+            ternaryExprTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(ternaryExprTree -> falseexp -> temp)));
         }
         virtual void VisitFuncCallTree(FuncCallTree * funcCallTree)
         {
+            yyerror("x");
             funcCallTree -> temp = new llvm::json::Object
             {
                 {"kind", funcCallTree -> kind},
@@ -1072,11 +1561,11 @@ class ToJson:public Visitor
                 {"inner", llvm::json::Array{}}
             }; 
             funcCallTree -> iden -> accept(this);
-            funcCallTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(funcCallTree -> iden -> temp)));
-            for(auto && it :funcCallTree -> para)
+            funcCallTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(funcCallTree -> iden -> temp)));
+            for(auto & it :funcCallTree -> para)
             {   
                 it -> accept(this);
-                funcCallTree -> temp -> get("inner")->getAsArray()->push_back(std::move(*(it->temp)));
+                funcCallTree -> temp ->get("inner")->getAsArray()->push_back(tov(*(it->temp)));
             }
         }
 };
@@ -1106,74 +1595,9 @@ class ToJson:public Visitor
         return retval;
     }
     
-    void TryUpcast(Tree * ptr)
-    {
-        if(ptr -> sons[0] -> info.type == ptr -> sons[1] -> info.type)
-        {
-            ptr -> info.type = ptr -> sons[0] -> info.type;
-            ptr -> info.layer = ptr -> sons[0] -> info.layer;
-        }
-        else if(ptr -> sons[0] -> info.type > ptr -> sons[1] -> info.type)
-        {
-            auto tmp = new Tree(0,"ImplicitCastExpr");
-            tmp -> sons.emplace_back(ptr -> sons[1]);
-            tmp -> isLeftVal = ptr -> sons[1] -> isLeftVal;
-            tmp -> info.type = ptr -> sons[0] -> info.type;
-            tmp -> info.layer = ptr -> sons[0] -> info.layer;
-            ptr -> sons[1] = tmp; 
-            ptr -> info.type = ptr -> sons[0] -> info.type;
-            ptr -> info.layer = ptr -> sons[0] -> info.layer;
-        }
-        else
-        {
-            auto tmp = new Tree(0,"ImplicitCastExpr");
-            tmp->sons.emplace_back(ptr -> sons[0]);
-            tmp -> isLeftVal = ptr -> sons[0] -> isLeftVal;
-            tmp -> info.type = ptr -> sons[1] -> info.type;
-            tmp -> info.layer = ptr -> sons[1] -> info.layer;
-            ptr -> sons[0] = tmp; 
-            ptr -> info.type = ptr -> sons[1] -> info.type;
-            ptr -> info.layer = ptr -> sons[1] -> info.layer;
-        }
-    }
-    void AssignAdjust(Tree * ptr)
-    {
-        if(ptr -> sons[0] -> info.type != ptr -> sons[1] -> info.type)
-        {
-            auto tmp = new Tree(0,"ImplicitCastExpr");
-            tmp -> sons.emplace_back(ptr -> sons[1]);
-            tmp -> isLeftVal = ptr -> sons[1] -> isLeftVal;
-            tmp -> info.type = ptr -> sons[0] -> info.type;
-            tmp -> info.layer = ptr -> sons[0] -> info.layer;
-            ptr -> sons[1] = tmp; 
-            ptr -> info.type = ptr -> sons[0] -> info.type;
-            ptr -> info.layer = ptr -> sons[0] -> info.layer;
-        }
-    }
-    void DeclAdjust(Tree * ptr)
-    {
-        if(ptr -> info.type != ptr -> sons[0] -> info.type)
-        {
-            auto tmp = new Tree(0,"ImplicitCastExpr");
-            tmp -> sons.emplace_back(ptr -> sons[0]);
-            tmp -> isLeftVal = ptr -> sons[0] -> isLeftVal;
-            tmp -> info.type = ptr -> info.type;
-            tmp -> info.layer = ptr -> info.layer;
-            ptr -> sons[0] = tmp; 
-        }
-    }
-    void RetAdjust(Tree * ptr)
-    {
-        if(curret.type != ptr -> sons[0] -> info.type)
-        {
-            auto tmp = new Tree(0,"ImplicitCastExpr");
-            tmp -> sons.emplace_back(ptr -> sons[0]);
-            tmp -> isLeftVal = ptr -> sons[0] -> isLeftVal;
-            tmp -> info.type = curret.type;
-            tmp -> info.layer = curret.layer;
-            ptr -> sons[0] = tmp; 
-        }
-    }
+    
+   
+    
     
     std::string GetType() const 
     {   
@@ -1199,56 +1623,6 @@ class ToJson:public Visitor
     std::string GetChild() const {return std::string(sons.size(),'*');}
     
     
-    void AdjustParaType(Tree * ptr)
-    {
-        int size = ptr -> info.args.size();
-        for(int i = 0;i < size;i++)
-        {
-            
-            if(ptr -> info.args[i].layer.num > 0 )
-            {
-                auto tmp = new Tree(1,"ImplicitCastExpr");
-                tmp -> sons.emplace_back(ptr -> sons[i + 1]);
-                tmp -> isLeftVal = ptr -> sons[i + 1] -> isLeftVal;
-                tmp -> info.type = ptr -> sons[i + 1] ->info.type;
-                tmp -> info.layer = ptr -> sons[i + 1] ->info.layer;
-                tmp -> info.isConst = ptr -> sons[i + 1] ->info.isConst;
-                ptr -> sons[i + 1] = tmp; 
-
-                if(ptr -> info.args[i].type != ptr -> sons[i + 1] -> info.type)
-                {
-                    auto tmp = new Tree(1,"ImplicitCastExpr");
-                    tmp -> sons.emplace_back(ptr -> sons[i + 1]);
-                    tmp -> isLeftVal = ptr -> sons[i + 1] -> isLeftVal;
-                    tmp -> info.type = ptr -> info.type;
-                    tmp -> info.layer = ptr -> info.layer;
-                    tmp -> info.isConst = ptr -> info.isConst;
-                    ptr -> sons[i + 1] = tmp; 
-                }
-                
-                else if(ptr -> info.args[i].isConst && !(ptr -> sons[i + 1] -> info.isConst))
-                {
-                    auto tmp = new Tree(1,"ImplicitCastExpr");
-                    tmp -> sons.emplace_back(ptr -> sons[i + 1]);
-                    tmp -> isLeftVal = ptr -> sons[i + 1] -> isLeftVal;
-                    tmp -> info.type = ptr -> info.type;
-                    tmp -> info.layer = ptr -> info.layer;
-                    tmp -> info.isConst = 1;
-                    ptr -> sons[i + 1] = tmp; 
-                }
-            }
-            if(ptr -> info.args[i].type != ptr -> sons[i + 1] -> info.type)
-            {
-                auto tmp = new Tree(0,"ImplicitCastExpr");
-                tmp -> sons.emplace_back(ptr -> sons[i + 1]);
-                tmp -> isLeftVal = ptr -> sons[i + 1] -> isLeftVal;
-                tmp -> info.type = ptr -> info.type;
-                tmp -> info.layer = ptr -> info.layer;
-                tmp -> info.isConst = ptr -> info.isConst;
-                ptr -> sons[i + 1] = tmp; 
-            }
-            
-        }
-    }
+    
 };
 */

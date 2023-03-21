@@ -265,10 +265,11 @@ auto yylex() {
 
 int main() {
   yyparse();
+  root -> SematicAnalysis();
   root->accept(new Print);
   root->accept(new ToJson);
 
-  llvm::outs() << root->temp << "\n";
+  llvm::outs() << tov(*(root->temp)) << "\n";
 }
 %}
 %union 
@@ -414,7 +415,7 @@ FuncDecl: FuncD T_SEMI {
 
 
 FuncFParams : FuncFParam {
-    auto ptr = new FuncDeclTree(0,"FunctionDecl");
+    auto ptr = new FuncDeclTree("FunctionDecl");
     ptr -> addSon(dynamic_cast<VarDeclTree *>($<tree>1));
     $<tree>$ = ptr;
 }
@@ -492,6 +493,7 @@ FuncCall: T_IDENTIFIER T_L_PAREN T_R_PAREN{
     auto tp1 = new DeclRefTree("DeclRefExpr", $<tree>1->name);
     auto tp2 = new ImplicitCastExprTree("ImplicitCastExpr");
     tp2 -> castkind = "FunctionToPointerDecay";
+    tp2 -> isLeftVal = 0;
     tp2 -> cast = dynamic_cast<ExprTree *>(tp1);
     ptr -> iden = dynamic_cast<ExprTree *>(tp2);
     free($<tree>1);
@@ -502,6 +504,7 @@ FuncCall: T_IDENTIFIER T_L_PAREN T_R_PAREN{
     auto tp1 = new DeclRefTree("DeclRefExpr", $<tree>1->name);
     auto tp2 = new ImplicitCastExprTree("ImplicitCastExpr");
     tp2 -> castkind = "FunctionToPointerDecay";
+    tp2 -> isLeftVal = 0;
     tp2 -> cast = dynamic_cast<ExprTree *>(tp1);
     ptr -> iden = dynamic_cast<ExprTree *>(tp2);
     free($<tree>1);
@@ -584,14 +587,14 @@ ConstDefs : ConstDef {
 };
 
 ConstDef : T_IDENTIFIER T_EQUAL ConstInitVal {
-    auto ptr = new VarDeclTree(0,"VarDecl", $<tree>1->name);
+    auto ptr = new VarDeclTree("VarDecl", $<tree>1->name);
     ptr -> info.isConst = 1;
     ptr -> initval = dynamic_cast<ExprTree *>($<tree>3);
     free($<tree>1);
     $<tree>$ = ptr;
 }
 | T_IDENTIFIER ConstDims T_EQUAL ConstInitVal {
-    auto ptr = new VarDeclTree(0,"VarDecl", $<tree>1->name);
+    auto ptr = new VarDeclTree("VarDecl", $<tree>1->name);
     ptr -> info.isConst = 1;
     ptr -> info.layer = std::move(*$<layer>2);
     ptr -> initval = dynamic_cast<ExprTree *>($<tree>4);
@@ -611,19 +614,19 @@ VarDefs : VarDef {
 };
 
 VarDef : T_IDENTIFIER T_EQUAL InitVal {
-    auto ptr = new VarDeclTree(0,"VarDecl", $<tree>1->name);
+    auto ptr = new VarDeclTree("VarDecl", $<tree>1->name);
     ptr -> initval = dynamic_cast<ExprTree *>($<tree>3);
     free($<tree>1);
     $<tree>$ = ptr;
 }
 | T_IDENTIFIER {
-    auto ptr = new VarDeclTree(0,"VarDecl", $<tree>1->name);
+    auto ptr = new VarDeclTree("VarDecl", $<tree>1->name);
     ptr -> initval = nullptr;
     free($<tree>1);
     $<tree>$ = ptr;
 }
 | T_IDENTIFIER ConstDims T_EQUAL InitVal {
-    auto ptr = new VarDeclTree(0,"VarDecl", $<tree>1->name);
+    auto ptr = new VarDeclTree("VarDecl", $<tree>1->name);
     ptr -> info.layer = std::move(*$<layer>2);
     ptr -> initval = dynamic_cast<ExprTree *>($<tree>4);
     free($<tree>1);
@@ -643,8 +646,8 @@ ConstInitVal : ConstExp {
 | T_L_BRACE T_R_BRACE
 {
     auto ptr = new InitListExprTree("InitListExpr");
-    //auto tmp = new Tree(0,"array_filler: ImplicitValueInitExpr");
-    //ptr->addSon(0,tmp);
+    //auto tmp = new Tree("array_filler: ImplicitValueInitExpr");
+    //ptr->addSon(tmp);
     $<tree>$ = ptr;
 }
 | T_L_BRACE ConstInitVals T_R_BRACE
@@ -654,13 +657,13 @@ ConstInitVal : ConstExp {
 
 ConstInitVals : ConstInitVal {
     auto ptr = new InitListExprTree("InitListExpr");
-    //ptr->addSon(0,$<tree>1);
+    //ptr->addSon($<tree>1);
     //ptr->info = $<tree>1 -> info;
     $<tree>$ = ptr;
 }
 | ConstInitVals T_COMMA ConstInitVal {
     auto ptr = $<tree>1;
-    //ptr->addSon(0,$<tree>3);
+    //ptr->addSon($<tree>3);
     $<tree>$ = ptr;
 }
 
@@ -675,8 +678,8 @@ InitVal : LOrExp {
 | T_L_BRACE T_R_BRACE
 {
     auto ptr = new InitListExprTree("InitListExpr");
-    //auto tmp = new Tree(0,"array_filler: ImplicitValueInitExpr");
-    //ptr->addSon(0,tmp);
+    //auto tmp = new Tree("array_filler: ImplicitValueInitExpr");
+    //ptr->addSon(tmp);
     $<tree>$ = ptr;
 }
 | T_L_BRACE InitVals T_R_BRACE
@@ -687,12 +690,12 @@ InitVal : LOrExp {
 InitVals : InitVal {
     auto ptr = new InitListExprTree("InitListExpr");
     //ptr->info = $<tree>1 -> info;
-    //ptr->addSon(0,$<tree>1);
+    //ptr->addSon($<tree>1);
     $<tree>$ = ptr;
 }
 | InitVals T_COMMA InitVal {
     auto ptr = $<tree>1;
-    //ptr->addSon(0,$<tree>3);
+    //ptr->addSon($<tree>3);
     $<tree>$ = ptr;
 };
 
@@ -705,7 +708,7 @@ ConstDims :ConstDim {
     
     auto ptr = $<layer>2;
     ptr -> emplace_back($<layer>1 -> len[0]);
-    free($<layer>1);
+    // free($<layer>1);
     $<layer>$ = ptr;
 };
 
@@ -723,13 +726,13 @@ LVal: T_IDENTIFIER {
     auto ptr = new ArraySubscriptExprTree("ArraySubscriptExpr");
     auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
     tmp -> cast = dynamic_cast<ExprTree *>($<tree>1);
-    tmp -> info = tmp -> cast -> info;
+    //tmp -> info = tmp -> cast -> info;
     tmp -> castkind = "ArrayToPointerDecay";
     ptr -> sym = dynamic_cast<ExprTree *>(tmp);
     ptr -> script = dynamic_cast<ExprTree *>($<tree>2);
     ptr -> isLeftVal = 1;
-    ptr -> info = tmp -> cast -> info;
-    ptr -> info.layer.pop_back();
+    //ptr -> info = tmp -> cast -> info;
+    //ptr -> info.layer.pop_back();
     $<tree>$ = ptr;
 }
 ;
@@ -751,13 +754,14 @@ Stmt: T_RETURN Exp T_SEMI {
     $<tree>$ = ptr;
 }
 | T_SEMI {
-    auto ptr = new Tree("NullStmt");
+    auto ptr = new NullStmtTree("NullStmt");
     $<tree>$ = ptr;
 }
 | T_IF T_L_PAREN Exp T_R_PAREN Stmt {
     auto ptr = new IfStmtTree("IfStmt");
     ptr -> cond = dynamic_cast<ExprTree *>($<tree>3);
     ptr -> truestmt = dynamic_cast<StmtTree *>($<tree>5);
+    ptr -> falsestmt = nullptr;
     $<tree>$ = ptr;
 } 
 | T_IF T_L_PAREN Exp T_R_PAREN Stmt T_ELSE Stmt {
@@ -780,9 +784,9 @@ Stmt: T_RETURN Exp T_SEMI {
     $<tree>$ = ptr;
 }
 | T_FOR T_L_PAREN Exp T_SEMI Exp T_SEMI Exp T_R_PAREN Stmt {
-    auto ptr = new ForStmtTree(0,"ForStmt");
+    auto ptr = new ForStmtTree("ForStmt");
     ptr -> init = dynamic_cast<ExprTree *>($<tree>3);
-    auto nptr = new ExprTree(0,"");
+    auto nptr = new ExprTree("");
     ptr -> null = dynamic_cast<ExprTree *>(nptr);
     ptr -> cond = dynamic_cast<ExprTree *>($<tree>5);
     ptr -> incr = dynamic_cast<ExprTree *>($<tree>7);
@@ -855,7 +859,9 @@ UnaryOp:T_PLUS {$<opcode>$ = OP_PLUS;}
 
 
 PrimaryExp: T_NUMERIC_CONSTANT {
-    $<tree>$ = $<tree>1;
+     auto ptr = dynamic_cast<LiteralTree *>($<tree>1);
+    ptr -> isLeftVal = 0;
+    $<tree>$ = ptr;
 }
 | T_L_PAREN Exp T_R_PAREN {
     auto ptr = new ParenExprTree("ParenExpr");
@@ -868,7 +874,9 @@ PrimaryExp: T_NUMERIC_CONSTANT {
     $<tree>$ = $<tree>1;
 }
 | String_Literals {
-  $<tree>$ = $<tree>1;
+    auto ptr = dynamic_cast<LiteralTree *>($<tree>1);
+    ptr -> isLeftVal = 0;
+    $<tree>$ = ptr;
 }
 
 String_Literals :T_STRING_LITERAL{
@@ -1002,7 +1010,7 @@ AssignExp : LOrExp {$<tree>$ = $<tree>1 ;}
     $<tree>$ = ptr;
 }
 | LVal AssignOp LOrExp {
-    auto ptr = new BinaryExprTree(0,"CompoundAssignOperator");
+    auto ptr = new BinaryExprTree("CompoundAssignOperator");
     ptr -> left = dynamic_cast<ExprTree *>($<tree>1);
     ptr -> right = dynamic_cast<ExprTree *>($<tree>3);
     ptr -> opcode = $<opcode>2;

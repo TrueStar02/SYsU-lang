@@ -1,54 +1,46 @@
-|      -BinaryOperator  
-|       -ArraySubscriptExpr  
-|        -ImplicitCastExpr  
-|         -ArraySubscriptExpr  
-|          -ImplicitCastExpr  
-|           -DeclRefExpr arr1 
-|          -ImplicitCastExpr  
-|           -DeclRefExpr x 
-|        -IntegerLiteral  0
-|       -ArraySubscriptExpr  
-|        -ImplicitCastExpr  
-|         -ArraySubscriptExpr  
-|          -ImplicitCastExpr  
-|           -DeclRefExpr arr1 
-|          -ImplicitCastExpr  
-|           -DeclRefExpr x 
-|        -IntegerLiteral  1
-| -FunctionDecl main 
-|  -CompoundStmt  
-|   -DeclStmt  
-|    -VarDecl arr 
-|     -InitListExpr  
-|      -InitListExpr  
-|       -IntegerLiteral  3
-|       -IntegerLiteral  7
-|       -IntegerLiteral  0
-|      -InitListExpr  
-|       -IntegerLiteral  5
-|       -IntegerLiteral  0
-|       -IntegerLiteral  0
-|      -InitListExpr  
-|       -IntegerLiteral  8
-|       -IntegerLiteral  1
-|       -IntegerLiteral  0
-|      -InitListExpr  
-|       -IntegerLiteral  4
-|       -IntegerLiteral  6
-|       -IntegerLiteral  0
-|      -InitListExpr  
-|       -IntegerLiteral  9
-|       -IntegerLiteral  2
-|       -IntegerLiteral  0
-|   -DeclStmt  
-|    -VarDecl y 
-|     -IntegerLiteral  1
-|   -CallExpr  
-|    -ImplicitCastExpr  
-|     -DeclRefExpr add 
-|    -ImplicitCastExpr  
-|     -DeclRefExpr arr 
-|    -IntegerLiteral  5
-|   -ReturnStmt  
-|    -ImplicitCastExpr  
-|     -DeclRefExpr y 
+  -FunctionDecl main  int()
+|   -CompoundStmt   
+|    -DeclStmt   
+|     -VarDecl t  int
+|     -VarDecl m  int
+|    -DeclStmt   
+|     -VarDecl a  int
+|     -VarDecl b  int
+|    -BinaryOperator   int
+|     -DeclRefExpr t  int
+|     -IntegerLiteral  1 int
+|    -WhileStmt   
+|     -DeclRefExpr t  int
+|     -CompoundStmt   
+|      -BinaryOperator   int
+|       -DeclRefExpr t  int
+|       -BinaryOperator   int
+|        -ImplicitCastExpr   int LValueToRValue
+|         -DeclRefExpr t  int
+|        -IntegerLiteral  1 int
+|      -BinaryOperator   int
+|       -DeclRefExpr n  int
+|       -IntegerLiteral  4 int
+|      -BinaryOperator   int
+|       -DeclRefExpr m  int
+|       -IntegerLiteral  10 int
+|      -DeclStmt   
+|       -VarDecl i  int
+|        -IntegerLiteral  0 int
+|      -DeclStmt   
+|       -VarDecl flag  int
+|        -IntegerLiteral  0 int
+|      -CallExpr   void
+|       -ImplicitCastExpr   void FunctionToPointerDecay
+|        -DeclRefExpr init  void
+|       -ImplicitCastExpr   int LValueToRValue
+|        -DeclRefExpr n  int
+|      -DeclStmt   
+|       -VarDecl k  int
+|        -BinaryOperator   int
+|         -BinaryOperator   int
+|          -ImplicitCastExpr   int LValueToRValue
+|           -DeclRefExpr n  int
+|          -ImplicitCastExpr   int LValueToRValue
+|           -DeclRefExpr n  int
+|         -IntegerLiteral  1 int
