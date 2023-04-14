@@ -1,6 +1,5 @@
 
-int feb(int i)
-{
+int feb(int i){
     if(i == 1 || i == 2)
         return 1;
     else

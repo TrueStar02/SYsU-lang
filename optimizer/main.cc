@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     Err.print(argv[0], llvm::errs());
     return -1;
   }
-
+/*
   // Create a module pass manager and add StaticCallCounterPrinter to it.
   llvm::ModulePassManager MPM;
   MPM.addPass(sysu::StaticCallCounterPrinter(llvm::errs()));
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
 
   // Finally, run the passes registered with MPM
   MPM.run(*M, MAM);
-
+*/
   M->print(llvm::outs(), nullptr);
   return 0;
 }

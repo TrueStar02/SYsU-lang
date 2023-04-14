@@ -10,6 +10,7 @@ int main()
 	int len2 = len;
 	int c1[len + 5];
 	int c2[len + 5];
+	int result[3000];
 	i = 0;
 	while (i < len1) {
 		c1[i] = mult1[i];

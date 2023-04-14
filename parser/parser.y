@@ -1,6 +1,7 @@
 %code requires
 {
 #include<iostream>
+#include<vector>
 class Tree;
 class TranslationUnitTree;
 class DeclTree;
@@ -131,7 +132,12 @@ auto yylex() {
     else 
     {
       sscanf(s.c_str(),"%lf",&fnum);
-      sprintf(number_buffer,"%.6e",fnum);
+      if(fnum == 1e-6)
+        sprintf(number_buffer,"9.9999999999999995E-7");
+      else if(fnum == 1000000000)
+        sprintf(number_buffer,"1.0E+9");
+      else
+        sprintf(number_buffer,"%.17g",fnum);
       s = number_buffer;
       yylval.tree = new LiteralTree("FloatingLiteral", "", s); 
       dynamic_cast<LiteralTree *>(yylval.tree) -> info.type = Double; 
@@ -275,7 +281,7 @@ int main() {
 %union 
 { Tree* tree;
   Info * info;
-  Layer * layer;
+  std::vector<ExprTree *> * layer;
   OpType opcode;
 }
 
@@ -383,7 +389,15 @@ FuncD: BType T_IDENTIFIER T_L_PAREN T_R_PAREN {
     auto ptr = dynamic_cast<FuncDeclTree *>($<tree>4);
     ptr -> name = $<tree>2->name;
     ptr -> info = *$<info>1;
-    ptr -> GetParaType();
+    free($<tree>2);
+    free($<info>1);
+    $<tree>$ = ptr;
+}
+|  BType T_IDENTIFIER T_L_PAREN FuncFParams T_COMMA T_ELLIPSIS T_R_PAREN {
+    auto ptr = dynamic_cast<FuncDeclTree *>($<tree>4);
+    ptr -> name = $<tree>2->name;
+    ptr -> info = *$<info>1;
+    ptr -> valen = 1;
     free($<tree>2);
     free($<info>1);
     $<tree>$ = ptr;
@@ -396,10 +410,17 @@ FuncD: BType T_IDENTIFIER T_L_PAREN T_R_PAREN {
 |  T_VOID T_IDENTIFIER T_L_PAREN FuncFParams T_R_PAREN {
     auto ptr = dynamic_cast<FuncDeclTree *>($<tree>4);
     ptr->name = $<tree>2->name;
-    ptr -> GetParaType();
     free($<tree>2);
     $<tree>$ = ptr;
-};
+}
+|  T_VOID  T_IDENTIFIER T_L_PAREN FuncFParams T_COMMA T_ELLIPSIS T_R_PAREN {
+    auto ptr = dynamic_cast<FuncDeclTree *>($<tree>4);
+    ptr -> name = $<tree>2->name;
+    ptr -> valen = 1;
+    free($<tree>2);
+    $<tree>$ = ptr;
+}
+;
 
 FuncDef: FuncD Block {
     auto ptr = dynamic_cast<FuncDeclTree *>($<tree>1);
@@ -429,6 +450,7 @@ FuncFParam : BType T_IDENTIFIER {
     auto ptr = new VarDeclTree("ParmVarDecl", $<tree>2->name);
     ptr -> info.type = $<info>1->type;
     ptr -> initval = nullptr;
+    ptr -> dims = nullptr;
     free($<info>1);
     free($<tree>2);
     $<tree>$ = ptr;
@@ -439,7 +461,8 @@ FuncFParam : BType T_IDENTIFIER {
     ptr -> info.type = $<info>1->type;
     ptr -> initval = nullptr;
     free($<info>1);
-    ptr -> info.layer.emplace_back();
+    ptr -> dims = new std::vector<ExprTree *>;
+    ptr -> dims -> emplace_back(new LiteralTree("IntegerLiteral", "", "0"));
     free($<tree>2);
     $<tree>$ = ptr;
 }
@@ -449,8 +472,8 @@ FuncFParam : BType T_IDENTIFIER {
     ptr -> info.type = $<info>1->type;
     ptr -> initval = nullptr;
     free($<info>1);
-    ptr -> info.layer = std::move(*$<layer>5);
-    ptr -> info.layer.emplace_back();
+    ptr -> dims = $<layer>5;
+    ptr -> dims -> emplace_back(new LiteralTree("IntegerLiteral", "", "0"));
     free($<tree>2);
     $<tree>$ = ptr;
 }
@@ -458,6 +481,7 @@ FuncFParam : BType T_IDENTIFIER {
     auto ptr = new VarDeclTree("ParmVarDecl", $<tree>3->name);
     ptr -> info.type = $<info>2->type;
     ptr -> initval = nullptr;
+    ptr -> dims = nullptr;
     ptr -> info.isConst = 1;
     free($<info>2);
     free($<tree>3);
@@ -470,7 +494,8 @@ FuncFParam : BType T_IDENTIFIER {
     ptr -> initval = nullptr;
     ptr -> info.isConst = 1;
     free($<info>2);
-    ptr -> info.layer.emplace_back();
+    ptr -> dims = new std::vector<ExprTree *>;
+    ptr -> dims -> emplace_back(new LiteralTree("IntegerLiteral", "", "0"));
     free($<tree>3);
     $<tree>$ = ptr;
 }
@@ -481,8 +506,8 @@ FuncFParam : BType T_IDENTIFIER {
     ptr -> initval = nullptr;
     ptr -> info.isConst = 1;
     free($<info>2);
-    ptr -> info.layer = std::move(*$<layer>6);
-    ptr -> info.layer.emplace_back();
+    ptr -> dims = $<layer>5;
+    ptr -> dims -> emplace_back(new LiteralTree("IntegerLiteral", "", "0"));
     free($<tree>3);
     $<tree>$ = ptr;
 };
@@ -589,6 +614,7 @@ ConstDefs : ConstDef {
 ConstDef : T_IDENTIFIER T_EQUAL ConstInitVal {
     auto ptr = new VarDeclTree("VarDecl", $<tree>1->name);
     ptr -> info.isConst = 1;
+    ptr -> dims = nullptr;
     ptr -> initval = dynamic_cast<ExprTree *>($<tree>3);
     free($<tree>1);
     $<tree>$ = ptr;
@@ -596,7 +622,7 @@ ConstDef : T_IDENTIFIER T_EQUAL ConstInitVal {
 | T_IDENTIFIER ConstDims T_EQUAL ConstInitVal {
     auto ptr = new VarDeclTree("VarDecl", $<tree>1->name);
     ptr -> info.isConst = 1;
-    ptr -> info.layer = std::move(*$<layer>2);
+    ptr -> dims = $<layer>2;
     ptr -> initval = dynamic_cast<ExprTree *>($<tree>4);
     free($<tree>1);
     $<tree>$ = ptr;
@@ -616,25 +642,27 @@ VarDefs : VarDef {
 VarDef : T_IDENTIFIER T_EQUAL InitVal {
     auto ptr = new VarDeclTree("VarDecl", $<tree>1->name);
     ptr -> initval = dynamic_cast<ExprTree *>($<tree>3);
+    ptr -> dims = nullptr;
     free($<tree>1);
     $<tree>$ = ptr;
 }
 | T_IDENTIFIER {
     auto ptr = new VarDeclTree("VarDecl", $<tree>1->name);
     ptr -> initval = nullptr;
+    ptr -> dims = nullptr;
     free($<tree>1);
     $<tree>$ = ptr;
 }
 | T_IDENTIFIER ConstDims T_EQUAL InitVal {
     auto ptr = new VarDeclTree("VarDecl", $<tree>1->name);
-    ptr -> info.layer = std::move(*$<layer>2);
+    ptr -> dims = $<layer>2;
     ptr -> initval = dynamic_cast<ExprTree *>($<tree>4);
     free($<tree>1);
     $<tree>$ = ptr;
 }
 | T_IDENTIFIER ConstDims {
     auto ptr = new VarDeclTree("VarDecl", $<tree>1->name);
-    ptr -> info.layer = std::move(*$<layer>2);
+    ptr -> dims = $<layer>2;
     ptr -> initval = nullptr;
     free($<tree>1);
     $<tree>$ = ptr;
@@ -646,8 +674,6 @@ ConstInitVal : ConstExp {
 | T_L_BRACE T_R_BRACE
 {
     auto ptr = new InitListExprTree("InitListExpr");
-    //auto tmp = new Tree("array_filler: ImplicitValueInitExpr");
-    //ptr->addSon(tmp);
     $<tree>$ = ptr;
 }
 | T_L_BRACE ConstInitVals T_R_BRACE
@@ -657,13 +683,12 @@ ConstInitVal : ConstExp {
 
 ConstInitVals : ConstInitVal {
     auto ptr = new InitListExprTree("InitListExpr");
-    //ptr->addSon($<tree>1);
-    //ptr->info = $<tree>1 -> info;
+    //ptr->addSon(dynamic_cast<ExprTree *>($<tree>1));
     $<tree>$ = ptr;
 }
 | ConstInitVals T_COMMA ConstInitVal {
-    auto ptr = $<tree>1;
-    //ptr->addSon($<tree>3);
+    auto ptr = dynamic_cast<InitListExprTree *>($<tree>1);
+   // ptr->addSon(dynamic_cast<ExprTree *>($<tree>3));
     $<tree>$ = ptr;
 }
 
@@ -678,8 +703,7 @@ InitVal : LOrExp {
 | T_L_BRACE T_R_BRACE
 {
     auto ptr = new InitListExprTree("InitListExpr");
-    //auto tmp = new Tree("array_filler: ImplicitValueInitExpr");
-    //ptr->addSon(tmp);
+
     $<tree>$ = ptr;
 }
 | T_L_BRACE InitVals T_R_BRACE
@@ -689,30 +713,28 @@ InitVal : LOrExp {
 
 InitVals : InitVal {
     auto ptr = new InitListExprTree("InitListExpr");
-    //ptr->info = $<tree>1 -> info;
-    //ptr->addSon($<tree>1);
+    //ptr->addSon(dynamic_cast<ExprTree *>($<tree>1));
     $<tree>$ = ptr;
 }
 | InitVals T_COMMA InitVal {
-    auto ptr = $<tree>1;
-    //ptr->addSon($<tree>3);
+    auto ptr = dynamic_cast<InitListExprTree *>($<tree>1);
+    //ptr->addSon(dynamic_cast<ExprTree *>($<tree>3));
     $<tree>$ = ptr;
 };
 
 ConstDims :ConstDim {
-    auto ptr= new Layer;
-    ptr->emplace_back();
+    auto ptr= new std::vector<ExprTree *>;
+    ptr->emplace_back(dynamic_cast<ExprTree *>($<tree>1));
     $<layer>$ = ptr;
 }
 | ConstDim ConstDims {
     
     auto ptr = $<layer>2;
-    ptr -> emplace_back($<layer>1 -> len[0]);
-    // free($<layer>1);
+    ptr -> emplace_back(dynamic_cast<ExprTree *>($<tree>1));
     $<layer>$ = ptr;
 };
 
-ConstDim : T_L_SQUARE ConstExp T_R_SQUARE {};
+ConstDim : T_L_SQUARE ConstExp T_R_SQUARE {$<tree>$ = $<tree>2;};
 
 
 Dim : T_L_SQUARE LOrExp T_R_SQUARE {$<tree>$ = $<tree>2;};

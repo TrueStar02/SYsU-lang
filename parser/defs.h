@@ -57,7 +57,6 @@ class Info
         Type type;
         Layer layer;
         bool isConst;
-        std::vector<Info> args;
         Info(enum Type t = Void,bool ic = 0):
         type(t),isConst(ic){}
 };
@@ -382,8 +381,10 @@ class VarDeclTree : public DeclTree
 {
     public:
         ExprTree * initval;
+        std::vector<ExprTree *> * dims;
         VarDeclTree (std::string kind="", std::string name="", std::string value=""):
             DeclTree(kind,name,value){}
+        void GiveInitialList();
         virtual void accept( Visitor* visitor )
         {
             visitor -> VisitVarDeclTree(this);
@@ -395,6 +396,7 @@ class VarDeclTree : public DeclTree
 class FuncDeclTree: public DeclTree
 {
     public:    
+        bool valen = 0;
         std::vector<VarDeclTree *> sons;
         BlockStmtTree * body;
         FuncDeclTree (std::string kind="", std::string name="", std::string value=""):
@@ -402,11 +404,6 @@ class FuncDeclTree: public DeclTree
         virtual void accept( Visitor* visitor )
         {
             visitor -> VisitFuncDeclTree(this);
-        }
-        void GetParaType()
-        {
-            for(auto son:sons)
-                info.args.emplace_back(son->info);   
         }
         bool addSon(VarDeclTree* son)
         {   
@@ -418,18 +415,18 @@ class FuncDeclTree: public DeclTree
         virtual std::string getinfo()
         {
             std::string str = DeclTree::getinfo();
-            if(info.args.size())
+            if(sons.size())
             {
                 
                 str += "(";
-                for(Info arg:info.args)
+                for(auto son:sons)
                 {
-                    if(arg.isConst)
+                    if(son -> info.isConst)
                         str += "const ";
-                    str += typestr[arg.type];
-                    if(arg.layer.num)
+                    str += typestr[son -> info.type];
+                    if(son -> info.layer.num)
                     {
-                        for(int num1:arg.layer.len)
+                        for(int num1:son -> info.layer.len)
                         {
                             str += "[";
                             str += std::to_string(num1);
@@ -454,6 +451,7 @@ class ExprTree : public Tree
         bool isLeftVal;
         ExprTree (std::string kind="", std::string name="", std::string value=""):
             Tree(kind,name,value){}
+        virtual long long GetValue(){}
         virtual std::string getinfo()
         {
             std::string str;
@@ -462,6 +460,7 @@ class ExprTree : public Tree
             str += typestr[info.type];
             if(info.layer.num)
             {
+                
                 for(int num:info.layer.len)
                 {
                     str += "[";
@@ -483,6 +482,11 @@ class LiteralTree : public ExprTree
             visitor -> VisitLiteralTree(this);
         }
         virtual void SematicAnalysis(){}
+        virtual long long GetValue()
+        {
+            char * end;
+            return strtoll(value.c_str(),&end,10);
+        }
 };
 
 class ParenExprTree : public ExprTree
@@ -496,6 +500,10 @@ class ParenExprTree : public ExprTree
             visitor -> VisitParenExprTree(this);
         }
         virtual void SematicAnalysis();
+        virtual long long GetValue()
+        {
+            return son -> GetValue();
+        }
 };
 
 class InitListExprTree :public ExprTree
@@ -503,11 +511,44 @@ class InitListExprTree :public ExprTree
     public:    
         InitListExprTree(std::string kind="", std::string name="", std::string value=""):
             ExprTree(kind,name,value){}
+        std::vector<ExprTree *> sons;
+        bool ok = 0;
         virtual void accept( Visitor* visitor )
         {
             visitor -> VisitInitListExprTree(this);
         }
-        virtual void SematicAnalysis(){}
+        bool addSon(ExprTree* son)
+        {   
+            sons.emplace_back(son);
+        }
+        void spreadToLeaves(Type type)
+        {
+            /*for(auto & ptr:sons)
+            {
+                auto nptr = dynamic_cast<InitListExprTree *>(ptr);
+                if(nptr)
+                    nptr -> spreadToLeaves(type);
+                else
+                {
+                    forceRight(ptr);
+                    if(type != ptr -> info.type)
+                    {
+                        auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
+                        tmp->cast = ptr;
+                        tmp->isLeftVal = ptr->isLeftVal;
+                        tmp->info.type = type;
+                        tmp->castkind = castlookup(ptr->info.type, type);
+                        ptr = tmp;
+                    }
+                }
+
+            }*/
+        }
+        void processInitList()
+        {
+            
+        }
+        virtual void SematicAnalysis();
 };
 
 class ImplicitCastExprTree : public ExprTree 
@@ -522,6 +563,10 @@ class ImplicitCastExprTree : public ExprTree
             visitor -> VisitImplicitCastExprTree(this);
         }
         virtual void SematicAnalysis();
+        virtual long long GetValue()
+        {
+            return cast -> GetValue();
+        }
 };
 
 class ArraySubscriptExprTree:public ExprTree
@@ -549,6 +594,11 @@ class DeclRefTree : public ExprTree
             visitor -> VisitDeclRefTree(this);
         }
         virtual void SematicAnalysis();
+        virtual long long GetValue()
+        {
+            VarDeclTree * temp = dynamic_cast<VarDeclTree *>(decl);
+            return temp -> initval -> GetValue();
+        }
 };
 
 class UnaryExprTree : public ExprTree
@@ -564,6 +614,18 @@ class UnaryExprTree : public ExprTree
             visitor -> VisitUnaryExprTree(this);
         }
         virtual void SematicAnalysis();
+        virtual long long GetValue()
+        {
+            long long res,temp = son -> GetValue();
+            switch(opcode)
+            {
+                case OP_PLUS:       res = temp;break;
+                case OP_MINUS:      res = -temp;break;
+                case OP_EXCLAIM:    res = !temp;break;
+                case OP_TILDE:      res = ~temp;break;
+            }
+            return res;
+        }
 };
 
 class BinaryExprTree : public ExprTree
@@ -581,6 +643,32 @@ class BinaryExprTree : public ExprTree
         void TryUpcast();
         void AssignAdjust();
         virtual void SematicAnalysis();
+        virtual long long GetValue()
+        {
+            long long res,val1 = left -> GetValue(),val2 = right -> GetValue();
+            switch(opcode)
+            {
+                case OP_PLUS:           res = val1 + val2;break;
+                case OP_MINUS:          res = val1 - val2;break;
+                case OP_STAR:           res = val1 * val2;break;
+                case OP_SLASH:          res = val1 / val2;break;
+                case OP_PERCENT:        res = val1 % val2;break;
+                case OP_LESSLESS:       res = val1 << val2;break;
+                case OP_GREATERGREATER: res = val1 >> val2;break;
+                case OP_LESS:           res = val1 < val2;break;
+                case OP_GREATER:        res = val1 > val2;break;
+                case OP_LESSEQUAL:      res = val1 <= val2;break;
+                case OP_GREATEREQUAL:   res = val1 >= val2;break;
+                case OP_EQUALEQUAL:     res = val1 == val2;break;
+                case OP_EXCLAIMEQUAL:   res = val1 != val2;break;
+                case OP_AMP:            res = val1 & val2;break;
+                case OP_CARET:          res = val1 ^ val2;break;
+                case OP_PIPE:           res = val1 | val2;break;
+                case OP_AMPAMP:         res = val1 && val2;break;
+                case OP_PIPEPIPE:       res = val1 || val2;break;
+            }
+            return res;
+        }
 };
 
 class TernaryExprTree : public ExprTree
@@ -635,6 +723,22 @@ void DeclStmtTree::SpreadType(Type type)
 {
     for(auto son:sons)
         son -> info.type = type;
+}
+
+void InitListExprTree::SematicAnalysis()
+{
+    /*if(!sons.size())
+    {
+        sons.emplace_back(new ImplicitCastExprTree("array_filler: ImplicitValueInitExpr"));
+        sons[0]->info = info;
+        sons[0]->info.layer.pop_back();
+    }
+    else
+    {
+        spreadToLeaves(info.type);
+        processInitList();
+    }*/
+       
 
 }
 
@@ -767,13 +871,32 @@ void VarDeclTree::DeclAdjust()
 
 void VarDeclTree::SematicAnalysis()
 {
-    cursym->symt.insert(std::make_pair(name, this));
-    if (initval)
+    if(dims)
+    {
+        for(auto ptr:(*dims))
+        {
+            ptr -> SematicAnalysis();
+            info.layer.emplace_back(ptr -> GetValue());
+        }
+        if(initval)
+        {
+            //GiveInitialList();
+            //initval->SematicAnalysis();
+        }
+    }
+    else if (initval)
     {
         initval->SematicAnalysis();
         forceRight(initval);
         DeclAdjust();
     }
+    cursym->symt.insert(std::make_pair(name, this));
+}
+
+void VarDeclTree::GiveInitialList()
+{
+    auto ptr = dynamic_cast<InitListExprTree *>(initval);
+    ptr -> info = info;
 }
 
 void FuncDeclTree::SematicAnalysis()
@@ -917,11 +1040,12 @@ void FuncCallTree::SematicAnalysis()
 }
 void FuncCallTree::AdjustParaType()
 {
-    int size = iden->info.args.size();
+    auto funcdeclptr = dynamic_cast<FuncDeclTree * > ( dynamic_cast<DeclRefTree *>(dynamic_cast<ImplicitCastExprTree *>(iden)-> cast) -> decl);
+    int size = funcdeclptr -> sons.size();
     for (int i = 0; i < size; i++)
     {
 
-        if (iden->info.args[i].layer.num > 0)
+        if (funcdeclptr -> sons[i] -> info.layer.num > 0)
         {
             auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
             tmp->castkind = "FunctionToPointerDecay";
@@ -930,36 +1054,36 @@ void FuncCallTree::AdjustParaType()
             tmp->info = para[i]->info;
             para[i] = tmp;
 
-            if (iden->info.args[i].type != para[i]->info.type)
+            if (funcdeclptr -> sons[i] -> info.type != para[i]->info.type)
             {
                     auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
-                    tmp->castkind = castlookup(para[i]->info.type, iden->info.args[i].type);
+                    tmp->castkind = castlookup(para[i]->info.type, funcdeclptr -> sons[i] -> info.type);
                     tmp->cast = para[i];
                     tmp->isLeftVal = para[i]->isLeftVal;
-                    tmp->info = iden->info.args[i];
+                    tmp->info = funcdeclptr -> sons[i] -> info;
                     para[i] = tmp;
             }
 
-            else if (iden->info.args[i].isConst & !(para[i]->info.isConst))
+            else if (funcdeclptr -> sons[i] -> info.isConst & !(para[i]->info.isConst))
             {
                     auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
                     tmp->castkind = "NoOp";
                     tmp->cast = para[i];
                     tmp->isLeftVal = para[i]->isLeftVal;
-                    tmp->info = iden->info.args[i];
+                    tmp->info = funcdeclptr -> sons[i] -> info;
                     para[i] = tmp;
             }
         }
         else 
         {
             forceRight(para[i]);
-            if (iden->info.args[i].type != para[i]->info.type)
+            if (funcdeclptr -> sons[i] -> info.type != para[i]->info.type)
             {
                 auto tmp = new ImplicitCastExprTree("ImplicitCastExpr");
-                tmp->castkind = castlookup(para[i]->info.type, iden->info.args[i].type);
+                tmp->castkind = castlookup(para[i]->info.type,funcdeclptr -> sons[i] -> info.type);
                 tmp->cast = para[i];
                 tmp->isLeftVal = para[i]->isLeftVal;
-                tmp->info = iden->info.args[i];
+                tmp->info = funcdeclptr -> sons[i] -> info;
                 para[i] = tmp;
             }
         }
