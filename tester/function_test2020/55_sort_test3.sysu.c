@@ -38,7 +38,6 @@ int QuickSort(int arr[], int low, int high)
         arr[i] = k;
         int tmp;
         tmp = i - 1;
-        arr;
         tmp = QuickSort(arr, low, tmp);
         tmp = i + 1;
         tmp = QuickSort(arr, tmp, high);

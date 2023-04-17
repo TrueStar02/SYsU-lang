@@ -91,7 +91,7 @@ std::string castlookup(Type a,Type b)
 
 int twoType(Type from,Type to)
 {
-    return from << 4 + to;
+    return int(from) * 16 + int(to);
 }
 
 
@@ -672,22 +672,23 @@ class ImplicitCastExprTree : public ExprTree
         virtual void SematicAnalysis();
         virtual void * GetValue()
         {
-
+            void * vp = cast -> GetValue();
             switch(twoType(cast -> info.type,info.type))
             {
-                case 0x12:  return new long long(*(int *)(cast -> GetValue()));  
-                case 0x13:  return new float(*(int *)(cast -> GetValue()));
-                case 0x14:  return new double(*(int *)(cast -> GetValue()));
-                case 0x21:  return new int(*(long long *)(cast -> GetValue()));
-                case 0x23:  return new float(*(long long *)(cast -> GetValue()));
-                case 0x24:  return new double(*(long long *)(cast -> GetValue()));
-                case 0x31:  return new int(*(float *)(cast -> GetValue()));
-                case 0x33:  return new long long(*(float *)(cast -> GetValue()));
-                case 0x34:  return new double(*(float *)(cast -> GetValue()));
-                case 0x41:  return new int(*(double *)(cast -> GetValue()));
-                case 0x42:  return new long long(*(double *)(cast -> GetValue()));
-                case 0x43:  return new float(*(double *)(cast -> GetValue()));
-                default:    return nullptr;
+                case 0x12:  return new long long(*(int *)(vp));  
+                case 0x13:  return new float(*(int *)(vp));
+                case 0x14:  return new double(*(int *)(vp));
+                case 0x21:  return new int(*(long long *)(vp));
+                case 0x23:  return new float(*(long long *)(vp));
+                case 0x24:  return new double(*(long long *)(vp));
+                case 0x31:  return new int(*(float *)(vp));
+                case 0x32:  return new long long(*(float *)(vp));
+                case 0x34:  return new double(*(float *)(vp));
+                case 0x41:  return new int(*(double *)(vp));
+                case 0x42:  return new long long(*(double *)(vp));
+                case 0x43:  return new float(*(double *)(vp));
+                default:    return vp;
+                
             }
         }
 };
@@ -739,34 +740,35 @@ class UnaryExprTree : public ExprTree
         virtual void SematicAnalysis();
         virtual void * GetValue()
         {
+            void * vp = son -> GetValue();
             switch(opcode)
             {
-                case OP_PLUS:       return son -> GetValue();
+                case OP_PLUS:       return vp;
                 case OP_MINUS:
                 {
                     switch(info.type)
                     {
                         case Int: 
                         {
-                            int * ptr = (int *)(son -> GetValue());
+                            int * ptr = (int *)(vp);
                             *ptr = -(*ptr);
                             return ptr;
                         }
                         case Float:
                         {
-                            float * ptr = (float *)(son -> GetValue());
+                            float * ptr = (float *)(vp);
                             *ptr = -(*ptr);
                             return ptr;
                         }
                         case Longlong: 
                         {
-                            long long * ptr = (long long *)(son -> GetValue());
+                            long long * ptr = (long long *)(vp);
                             *ptr = -(*ptr);
                             return ptr;
                         }
                         case Double: 
                         {
-                            double * ptr = (double *)(son -> GetValue());
+                            double * ptr = (double *)(vp);
                             *ptr = -(*ptr);
                             return ptr;
                         }
@@ -780,13 +782,13 @@ class UnaryExprTree : public ExprTree
                     {
                         case Int: 
                         {
-                            int * ptr = (int *)(son -> GetValue());
+                            int * ptr = (int *)(vp);
                             *ptr = !(*ptr);
                             return ptr;
                         }
                         case Longlong: 
                         {
-                            long long * ptr = (long long *)(son -> GetValue());
+                            long long * ptr = (long long *)(vp);
                             *ptr = !(*ptr);
                             return ptr;
                         }
@@ -800,13 +802,13 @@ class UnaryExprTree : public ExprTree
                     {
                         case Int: 
                         {
-                            int * ptr = (int *)(son -> GetValue());
+                            int * ptr = (int *)(vp);
                             *ptr = ~(*ptr);
                             return ptr;
                         }
                         case Longlong: 
                         {
-                            long long * ptr = (long long *)(son -> GetValue());
+                            long long * ptr = (long long *)(vp);
                             *ptr = ~(*ptr);
                             return ptr;
                         }
@@ -837,16 +839,19 @@ class BinaryExprTree : public ExprTree
         virtual void SematicAnalysis();
         virtual void * GetValue()
         {
+            void * vpl = left -> GetValue();
+            void * vpr = right -> GetValue();
+
             switch(opcode)
             {
                 case OP_PLUS:           
                 {
                     switch(info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) + *(int *)(right -> GetValue()));
-                        case Longlong:  return new long long(*(long long *)(left -> GetValue()) + *(long long *)(right -> GetValue()));
-                        case Float:     return new float(*(float *)(left -> GetValue()) + *(float *)(right -> GetValue()));
-                        case Double:    return new double(*(double *)(left -> GetValue()) + *(double *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) + *(int *)(vpr));
+                        case Longlong:  return new long long(*(long long *)(vpl) + *(long long *)(vpr));
+                        case Float:     return new float(*(float *)(vpl) + *(float *)(vpr));
+                        case Double:    return new double(*(double *)(vpl) + *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -854,10 +859,10 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) - *(int *)(right -> GetValue()));
-                        case Longlong:  return new long long(*(long long *)(left -> GetValue()) - *(long long *)(right -> GetValue()));
-                        case Float:     return new float(*(float *)(left -> GetValue()) - *(float *)(right -> GetValue()));
-                        case Double:    return new double(*(double *)(left -> GetValue()) - *(double *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) - *(int *)(vpr));
+                        case Longlong:  return new long long(*(long long *)(vpl) - *(long long *)(vpr));
+                        case Float:     return new float(*(float *)(vpl) - *(float *)(vpr));
+                        case Double:    return new double(*(double *)(vpl) - *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -865,10 +870,10 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) * *(int *)(right -> GetValue()));
-                        case Longlong:  return new long long(*(long long *)(left -> GetValue()) * *(long long *)(right -> GetValue()));
-                        case Float:     return new float(*(float *)(left -> GetValue()) * *(float *)(right -> GetValue()));
-                        case Double:    return new double(*(double *)(left -> GetValue()) * *(double *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) * *(int *)(vpr));
+                        case Longlong:  return new long long(*(long long *)(vpl) * *(long long *)(vpr));
+                        case Float:     return new float(*(float *)(vpl) * *(float *)(vpr));
+                        case Double:    return new double(*(double *)(vpl) * *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -876,10 +881,10 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) / *(int *)(right -> GetValue()));
-                        case Longlong:  return new long long(*(long long *)(left -> GetValue()) / *(long long *)(right -> GetValue()));
-                        case Float:     return new float(*(float *)(left -> GetValue()) / *(float *)(right -> GetValue()));
-                        case Double:    return new double(*(double *)(left -> GetValue()) / *(double *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) / *(int *)(vpr));
+                        case Longlong:  return new long long(*(long long *)(vpl) / *(long long *)(vpr));
+                        case Float:     return new float(*(float *)(vpl) / *(float *)(vpr));
+                        case Double:    return new double(*(double *)(vpl) / *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -887,8 +892,8 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) % *(int *)(right -> GetValue()));
-                        case Longlong:  return new long long(*(long long *)(left -> GetValue()) % *(long long *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) % *(int *)(vpr));
+                        case Longlong:  return new long long(*(long long *)(vpl) % *(long long *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -896,10 +901,10 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(twoType(left -> info.type,right -> info.type))
                     {
-                        case 0x11:      return new int(*(int *)(left -> GetValue()) << *(int *)(right -> GetValue()));
-                        case 0x12:      return new int(*(int *)(left -> GetValue()) << *(long long *)(right -> GetValue()));
-                        case 0x21:      return new long long(*(long long *)(left -> GetValue()) << *(int *)(right -> GetValue()));
-                        case 0x22:      return new long long(*(long long *)(left -> GetValue()) << *(long long *)(right -> GetValue()));
+                        case 0x11:      return new int(*(int *)(vpl) << *(int *)(vpr));
+                        case 0x12:      return new int(*(int *)(vpl) << *(long long *)(vpr));
+                        case 0x21:      return new long long(*(long long *)(vpl) << *(int *)(vpr));
+                        case 0x22:      return new long long(*(long long *)(vpl) << *(long long *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -907,10 +912,10 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(twoType(left -> info.type,right -> info.type))
                     {
-                        case 0x11:      return new int(*(int *)(left -> GetValue()) >> *(int *)(right -> GetValue()));
-                        case 0x12:      return new int(*(int *)(left -> GetValue()) >> *(long long *)(right -> GetValue()));
-                        case 0x21:      return new long long(*(long long *)(left -> GetValue()) >> *(int *)(right -> GetValue()));
-                        case 0x22:      return new long long(*(long long *)(left -> GetValue()) >> *(long long *)(right -> GetValue()));
+                        case 0x11:      return new int(*(int *)(vpl) >> *(int *)(vpr));
+                        case 0x12:      return new int(*(int *)(vpl) >> *(long long *)(vpr));
+                        case 0x21:      return new long long(*(long long *)(vpl) >> *(int *)(vpr));
+                        case 0x22:      return new long long(*(long long *)(vpl) >> *(long long *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -918,10 +923,10 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(left -> info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) < *(int *)(right -> GetValue()));
-                        case Longlong:  return new int(*(long long *)(left -> GetValue()) < *(long long *)(right -> GetValue()));
-                        case Float:     return new int(*(float *)(left -> GetValue()) < *(float *)(right -> GetValue()));
-                        case Double:    return new int(*(double *)(left -> GetValue()) < *(double *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) < *(int *)(vpr));
+                        case Longlong:  return new int(*(long long *)(vpl) < *(long long *)(vpr));
+                        case Float:     return new int(*(float *)(vpl) < *(float *)(vpr));
+                        case Double:    return new int(*(double *)(vpl) < *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -929,10 +934,10 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(left -> info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) > *(int *)(right -> GetValue()));
-                        case Longlong:  return new int(*(long long *)(left -> GetValue()) > *(long long *)(right -> GetValue()));
-                        case Float:     return new int(*(float *)(left -> GetValue()) > *(float *)(right -> GetValue()));
-                        case Double:    return new int(*(double *)(left -> GetValue()) > *(double *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) > *(int *)(vpr));
+                        case Longlong:  return new int(*(long long *)(vpl) > *(long long *)(vpr));
+                        case Float:     return new int(*(float *)(vpl) > *(float *)(vpr));
+                        case Double:    return new int(*(double *)(vpl) > *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -940,10 +945,10 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(left -> info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) <= *(int *)(right -> GetValue()));
-                        case Longlong:  return new int(*(long long *)(left -> GetValue()) <= *(long long *)(right -> GetValue()));
-                        case Float:     return new int(*(float *)(left -> GetValue()) <= *(float *)(right -> GetValue()));
-                        case Double:    return new int(*(double *)(left -> GetValue()) <= *(double *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) <= *(int *)(vpr));
+                        case Longlong:  return new int(*(long long *)(vpl) <= *(long long *)(vpr));
+                        case Float:     return new int(*(float *)(vpl) <= *(float *)(vpr));
+                        case Double:    return new int(*(double *)(vpl) <= *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -951,10 +956,10 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(left -> info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) >= *(int *)(right -> GetValue()));
-                        case Longlong:  return new int(*(long long *)(left -> GetValue()) >= *(long long *)(right -> GetValue()));
-                        case Float:     return new int(*(float *)(left -> GetValue()) >= *(float *)(right -> GetValue()));
-                        case Double:    return new int(*(double *)(left -> GetValue()) >= *(double *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) >= *(int *)(vpr));
+                        case Longlong:  return new int(*(long long *)(vpl) >= *(long long *)(vpr));
+                        case Float:     return new int(*(float *)(vpl) >= *(float *)(vpr));
+                        case Double:    return new int(*(double *)(vpl) >= *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -962,10 +967,10 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(left -> info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) == *(int *)(right -> GetValue()));
-                        case Longlong:  return new int(*(long long *)(left -> GetValue()) == *(long long *)(right -> GetValue()));
-                        case Float:     return new int(*(float *)(left -> GetValue()) == *(float *)(right -> GetValue()));
-                        case Double:    return new int(*(double *)(left -> GetValue()) == *(double *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) == *(int *)(vpr));
+                        case Longlong:  return new int(*(long long *)(vpl) == *(long long *)(vpr));
+                        case Float:     return new int(*(float *)(vpl) == *(float *)(vpr));
+                        case Double:    return new int(*(double *)(vpl) == *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -973,10 +978,10 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(left -> info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) != *(int *)(right -> GetValue()));
-                        case Longlong:  return new int(*(long long *)(left -> GetValue()) != *(long long *)(right -> GetValue()));
-                        case Float:     return new int(*(float *)(left -> GetValue()) != *(float *)(right -> GetValue()));
-                        case Double:    return new int(*(double *)(left -> GetValue()) != *(double *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) != *(int *)(vpr));
+                        case Longlong:  return new int(*(long long *)(vpl) != *(long long *)(vpr));
+                        case Float:     return new int(*(float *)(vpl) != *(float *)(vpr));
+                        case Double:    return new int(*(double *)(vpl) != *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -984,8 +989,8 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) & *(int *)(right -> GetValue()));
-                        case Longlong:  return new long long(*(long long *)(left -> GetValue()) & *(long long *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) & *(int *)(vpr));
+                        case Longlong:  return new long long(*(long long *)(vpl) & *(long long *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -993,8 +998,8 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) ^ *(int *)(right -> GetValue()));
-                        case Longlong:  return new long long(*(long long *)(left -> GetValue()) ^ *(long long *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) ^ *(int *)(vpr));
+                        case Longlong:  return new long long(*(long long *)(vpl) ^ *(long long *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -1002,8 +1007,8 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(info.type)
                     {
-                        case Int:       return new int(*(int *)(left -> GetValue()) | *(int *)(right -> GetValue()));
-                        case Longlong:  return new long long(*(long long *)(left -> GetValue()) | *(long long *)(right -> GetValue()));
+                        case Int:       return new int(*(int *)(vpl) | *(int *)(vpr));
+                        case Longlong:  return new long long(*(long long *)(vpl) | *(long long *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -1011,22 +1016,22 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(twoType(left -> info.type,right -> info.type))
                     {
-                        case 0x11:      return new int(*(int *)(left -> GetValue()) && *(int *)(right -> GetValue()));
-                        case 0x12:      return new int(*(int *)(left -> GetValue()) && *(long long *)(right -> GetValue()));
-                        case 0x13:      return new int(*(int *)(left -> GetValue()) && *(float *)(right -> GetValue()));
-                        case 0x14:      return new int(*(int *)(left -> GetValue()) && *(double *)(right -> GetValue()));
-                        case 0x21:      return new int(*(long long *)(left -> GetValue()) && *(int *)(right -> GetValue()));
-                        case 0x22:      return new int(*(long long *)(left -> GetValue()) && *(long long *)(right -> GetValue()));
-                        case 0x23:      return new int(*(long long *)(left -> GetValue()) && *(float *)(right -> GetValue()));
-                        case 0x24:      return new int(*(long long *)(left -> GetValue()) && *(double *)(right -> GetValue()));
-                        case 0x31:      return new int(*(float *)(left -> GetValue()) && *(int *)(right -> GetValue()));
-                        case 0x32:      return new int(*(float *)(left -> GetValue()) && *(long long *)(right -> GetValue()));
-                        case 0x33:      return new int(*(float *)(left -> GetValue()) && *(float *)(right -> GetValue()));
-                        case 0x34:      return new int(*(float *)(left -> GetValue()) && *(double *)(right -> GetValue()));
-                        case 0x41:      return new int(*(double *)(left -> GetValue()) && *(int *)(right -> GetValue()));
-                        case 0x42:      return new int(*(double *)(left -> GetValue()) && *(long long *)(right -> GetValue()));
-                        case 0x43:      return new int(*(double *)(left -> GetValue()) && *(float *)(right -> GetValue()));
-                        case 0x44:      return new int(*(double *)(left -> GetValue()) && *(double *)(right -> GetValue()));
+                        case 0x11:      return new int(*(int *)(vpl) && *(int *)(vpr));
+                        case 0x12:      return new int(*(int *)(vpl) && *(long long *)(vpr));
+                        case 0x13:      return new int(*(int *)(vpl) && *(float *)(vpr));
+                        case 0x14:      return new int(*(int *)(vpl) && *(double *)(vpr));
+                        case 0x21:      return new int(*(long long *)(vpl) && *(int *)(vpr));
+                        case 0x22:      return new int(*(long long *)(vpl) && *(long long *)(vpr));
+                        case 0x23:      return new int(*(long long *)(vpl) && *(float *)(vpr));
+                        case 0x24:      return new int(*(long long *)(vpl) && *(double *)(vpr));
+                        case 0x31:      return new int(*(float *)(vpl) && *(int *)(vpr));
+                        case 0x32:      return new int(*(float *)(vpl) && *(long long *)(vpr));
+                        case 0x33:      return new int(*(float *)(vpl) && *(float *)(vpr));
+                        case 0x34:      return new int(*(float *)(vpl) && *(double *)(vpr));
+                        case 0x41:      return new int(*(double *)(vpl) && *(int *)(vpr));
+                        case 0x42:      return new int(*(double *)(vpl) && *(long long *)(vpr));
+                        case 0x43:      return new int(*(double *)(vpl) && *(float *)(vpr));
+                        case 0x44:      return new int(*(double *)(vpl) && *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
@@ -1034,27 +1039,27 @@ class BinaryExprTree : public ExprTree
                 {
                     switch(twoType(left -> info.type,right -> info.type))
                     {
-                        case 0x11:      return new int(*(int *)(left -> GetValue()) || *(int *)(right -> GetValue()));
-                        case 0x12:      return new int(*(int *)(left -> GetValue()) || *(long long *)(right -> GetValue()));
-                        case 0x13:      return new int(*(int *)(left -> GetValue()) || *(float *)(right -> GetValue()));
-                        case 0x14:      return new int(*(int *)(left -> GetValue()) || *(double *)(right -> GetValue()));
-                        case 0x21:      return new int(*(long long *)(left -> GetValue()) || *(int *)(right -> GetValue()));
-                        case 0x22:      return new int(*(long long *)(left -> GetValue()) || *(long long *)(right -> GetValue()));
-                        case 0x23:      return new int(*(long long *)(left -> GetValue()) || *(float *)(right -> GetValue()));
-                        case 0x24:      return new int(*(long long *)(left -> GetValue()) || *(double *)(right -> GetValue()));
-                        case 0x31:      return new int(*(float *)(left -> GetValue()) || *(int *)(right -> GetValue()));
-                        case 0x32:      return new int(*(float *)(left -> GetValue()) || *(long long *)(right -> GetValue()));
-                        case 0x33:      return new int(*(float *)(left -> GetValue()) || *(float *)(right -> GetValue()));
-                        case 0x34:      return new int(*(float *)(left -> GetValue()) || *(double *)(right -> GetValue()));
-                        case 0x41:      return new int(*(double *)(left -> GetValue()) || *(int *)(right -> GetValue()));
-                        case 0x42:      return new int(*(double *)(left -> GetValue()) || *(long long *)(right -> GetValue()));
-                        case 0x43:      return new int(*(double *)(left -> GetValue()) || *(float *)(right -> GetValue()));
-                        case 0x44:      return new int(*(double *)(left -> GetValue()) || *(double *)(right -> GetValue()));
+                        case 0x11:      return new int(*(int *)(vpl) || *(int *)(vpr));
+                        case 0x12:      return new int(*(int *)(vpl) || *(long long *)(vpr));
+                        case 0x13:      return new int(*(int *)(vpl) || *(float *)(vpr));
+                        case 0x14:      return new int(*(int *)(vpl) || *(double *)(vpr));
+                        case 0x21:      return new int(*(long long *)(vpl) || *(int *)(vpr));
+                        case 0x22:      return new int(*(long long *)(vpl) || *(long long *)(vpr));
+                        case 0x23:      return new int(*(long long *)(vpl) || *(float *)(vpr));
+                        case 0x24:      return new int(*(long long *)(vpl) || *(double *)(vpr));
+                        case 0x31:      return new int(*(float *)(vpl) || *(int *)(vpr));
+                        case 0x32:      return new int(*(float *)(vpl) || *(long long *)(vpr));
+                        case 0x33:      return new int(*(float *)(vpl) || *(float *)(vpr));
+                        case 0x34:      return new int(*(float *)(vpl) || *(double *)(vpr));
+                        case 0x41:      return new int(*(double *)(vpl) || *(int *)(vpr));
+                        case 0x42:      return new int(*(double *)(vpl) || *(long long *)(vpr));
+                        case 0x43:      return new int(*(double *)(vpl) || *(float *)(vpr));
+                        case 0x44:      return new int(*(double *)(vpl) || *(double *)(vpr));
                         default:        return nullptr;
                     }
                 }
                 case OP_COMMA:
-                    return right -> GetValue();
+                    return vpr;
                 default:
                     return nullptr;
             }
@@ -2233,6 +2238,29 @@ StmtTree * covertStmt(Tree * tree)
     return ptr2;
 }
 
+std::string getStr(std::string && t)
+{
+    std::string s;
+    int i = 0;
+    while(t[i] != '\0')
+    {
+        if(t[i] == '\\')
+        {
+            i++;
+            switch(t[i])
+            {
+                case '\\':  s += '\\';  break;
+                case 'n':   s += '\n';  break;
+                case '\"':  s += '\"';  break;
+                case '\'':  s += '\'';  break;
+            }
+        }
+        else
+            s += t[i];
+        i++;
+    }
+    return s;
+}
 
 Tree * CreateFromJson(const llvm::json::Object *O)
 {
@@ -2271,6 +2299,11 @@ Tree * CreateFromJson(const llvm::json::Object *O)
         get_name(O,ptr);
         reg_id(O,ptr);
         get_type(O,ptr);
+
+        if(ptr -> info.type == Void && ptr -> info.isPointer)
+            return nullptr;
+        if(ptr -> info.type == Double)
+            return nullptr;
 
         if(auto predecl = O -> get("previousDecl"))
         {
@@ -2500,6 +2533,7 @@ Tree * CreateFromJson(const llvm::json::Object *O)
         if(auto vp = O->get("value"))
         {
             ptr -> value = vp -> getAsString() -> str();
+            ptr -> value = getStr(ptr -> value.substr(1,ptr -> value.length() - 2));
         }
         yyerror("N");
         return ptr;
@@ -2837,8 +2871,8 @@ llvm::Type * BasicType(Type type)
         case Int:       return llvm::Type::getInt32Ty(TheContext);
         case Longlong:  return llvm::Type::getInt64Ty(TheContext);
         case Char:      return llvm::Type::getInt8Ty(TheContext);
-        case Float:
-        case Double:    return llvm::Type::getFloatTy(TheContext);
+        case Float:     return llvm::Type::getFloatTy(TheContext);
+        case Double:    return llvm::Type::getDoubleTy(TheContext);
         case Void:      return llvm::Type::getVoidTy(TheContext);
     }
 }
@@ -2867,55 +2901,28 @@ static llvm::AllocaInst *CreateEntryBlockAlloca(llvm::Function *TheFunction,llvm
     return TmpB.CreateAlloca(Ty, ArraySize, VarName);
 }
 
-void getZeroConstInitList(std::vector<llvm::Constant *> & elements,int start,int fill,Type type)
+llvm::Constant * fillConstInitList(InitListExprTree * initlist,std::vector<size_t> & sizes,int sz_index,int fillZero,Info info)
 {
-    switch(type)
-    {
-        case Int:
-        {
-            for(int j = 0;j < fill;j++)
-            {
-                elements[start + j] = llvm::ConstantInt::get(TheContext, llvm::APInt(32,0,1));
-            }
-            break;  
-        }      
-        case Longlong:
-        {
-            for(int j = 0;j < fill;j++)
-            {
-                elements[start + j] = llvm::ConstantInt::get(TheContext, llvm::APInt(64,0,1));
-            }
-            break;
-        }           
-        case Float:
-        case Double:
-        {
-            for(int j = 0;j < fill;j++)
-            {
-                elements[start + j] = llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0));
-            }
-            break;
-        }    
-    }
-}
-
-void fillConstInitList(std::vector<llvm::Constant *> & elements,InitListExprTree * initlist,std::vector<size_t> & steps,int st_index,std::vector<size_t> & sizes,int sz_index,int start)
-{
-    int step = steps[st_index];
     int size = sizes[sz_index];
     int i,fill,j;
-    int sonnum = initlist -> sons.size();
+    int sonnum;
     
-    bool last = (step == 1);
+    bool last = (sz_index == 0);
+    std::vector<llvm::Constant *> vec(size);
 
-    if(dynamic_cast<ImplicitValueInitExprTree *>(initlist -> sons[0]))
+    if(fillZero)
     {
-        fill = step * (size - sonnum + 1);
+        sonnum = 0;
+        i = 0;
+    }   
+    else if(dynamic_cast<ImplicitValueInitExprTree *>(initlist -> sons[0]))
+    {
+        sonnum = initlist -> sons.size();
         i = 1;
     }
     else
     {
-        fill = 0;
+        sonnum = initlist -> sons.size();
         i = 0;
     }
     
@@ -2927,25 +2934,53 @@ void fillConstInitList(std::vector<llvm::Constant *> & elements,InitListExprTree
             switch(initlist -> sons[i] -> info.type)
             {
                 case Int:  
-                    elements[start + j] = llvm::ConstantInt::get(TheContext,llvm::APInt(32,*(int *)p,1));
+                    vec[j] = llvm::ConstantInt::get(TheContext,llvm::APInt(32,*(int *)p,1));
                     break;
                 case Longlong:
-                    elements[start + j] = llvm::ConstantInt::get(TheContext,llvm::APInt(64,*(long long *)p,1));
+                    vec[j] = llvm::ConstantInt::get(TheContext,llvm::APInt(64,*(long long *)p,1));
                     break;
                 case Float:
-                    elements[start + j] = llvm::ConstantFP::get(TheContext,llvm::APFloat(*(float *)p));
+                    vec[j] = llvm::ConstantFP::get(TheContext,llvm::APFloat(*(float *)p));
                     break;
                 case Double:
-                    elements[start + j] = llvm::ConstantFP::get(TheContext,llvm::APFloat(*(double *)p));
+                    vec[j] = llvm::ConstantFP::get(TheContext,llvm::APFloat(*(double *)p));
                     break;
             }
         }
         else
         {
-            fillConstInitList(elements,dynamic_cast<InitListExprTree *>(initlist -> sons[i]),steps,st_index - 1,sizes,sz_index - 1,start + step * j);
+            vec[j] = fillConstInitList(dynamic_cast<InitListExprTree *>(initlist -> sons[i]),sizes,sz_index - 1,0,info);
         }
     }
-    getZeroConstInitList(elements,start + j * step,fill,initlist -> info.type);
+    info.layer.pop_back();
+    for(;j < size;j++)
+    {
+        if(last)
+        {
+            switch(info.type)
+            {
+                case Int:  
+                    vec[j] = llvm::ConstantInt::get(TheContext,llvm::APInt(32,0,1));
+                    break;
+                case Longlong:
+                    vec[j] = llvm::ConstantInt::get(TheContext,llvm::APInt(64,0,1));
+                    break;
+                case Char:
+                    vec[j] = llvm::ConstantInt::get(TheContext,llvm::APInt(8,0,1));
+                    break;
+                case Float:
+                    vec[j] = llvm::ConstantFP::get(TheContext,llvm::APFloat(0.0f));
+                    break;                   
+                case Double:
+                    vec[j] = llvm::ConstantFP::get(TheContext,llvm::APFloat(0.0));
+                    break;
+                
+            }
+        }
+        else
+            vec[j] = fillConstInitList(nullptr,sizes,sz_index - 1,1,info);
+    }
+    return llvm::ConstantArray::get(llvm::ArrayType::get(toLLVMType(info),size),vec);
 }
 
 void useLocalInitList(llvm::Value * arr,InitListExprTree * initlist,std::vector<size_t> & sizes,int sz_index,bool zeroFill,Type type = Void)
@@ -2991,12 +3026,11 @@ void useLocalInitList(llvm::Value * arr,InitListExprTree * initlist,std::vector<
         
         if(last)
         { 
-            yyerror(type);
             switch(type)
             {
                 case Int:       Builder.CreateStore(llvm::ConstantInt::get(TheContext, llvm::APInt(32,0,1)),initpos);break;
                 case Longlong:  Builder.CreateStore(llvm::ConstantInt::get(TheContext, llvm::APInt(64,0,1)),initpos);break;
-                case Float:       
+                case Float:     Builder.CreateStore(llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0f)),initpos);break;  
                 case Double:    Builder.CreateStore(llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0)),initpos);break;
             }            
         }
@@ -3025,20 +3059,32 @@ class ToLLVM:public Visitor
                     llvm::Constant *initval;
                     if (varDeclTree->initval)
                     {
-                        InitListExprTree *initlist = dynamic_cast<InitListExprTree *>(varDeclTree->initval);
-                        initlist->isGlobal = 1;
-                        initlist->accept(this);
-                        initval = llvm::dyn_cast<llvm::Constant>(initlist->ir);
+                        if(varDeclTree -> info.type == Char)
+                        {
+                            std::vector<llvm::Constant *> vec(varDeclTree -> info.layer.len[0]);
+                            int loopend = std::min(varDeclTree -> info.layer.len[0],varDeclTree -> initval ->value.size());
+                            int i;
+                            for(i = 0;i < loopend;i++)
+                            {
+                                vec[i] = llvm::ConstantInt::get(TheContext,llvm::APInt(8,varDeclTree -> initval ->value[i],1));
+                            }
+                            for(;i < varDeclTree -> info.layer.len[0];i++)
+                            {
+                                vec[i] = llvm::ConstantInt::get(TheContext,llvm::APInt(8,0,1));
+                            }
+                            initval = llvm::ConstantArray::get(llvm::ArrayType::get(llvm::Type::getInt8Ty(TheContext),varDeclTree -> info.layer.len[0]),vec);
+                        }
+                        else
+                        {
+                            InitListExprTree *initlist = dynamic_cast<InitListExprTree *>(varDeclTree->initval);
+                            initlist->isGlobal = 1;
+                            initlist->accept(this);
+                            initval = llvm::dyn_cast<llvm::Constant>(initlist->ir);
+                        }
                     }
                     else
                     {
-                        size_t tot = 1;
-                        for (int i : varDeclTree->info.layer.len)
-                            tot *= i;
-                        std::vector<llvm::Constant *> elements(tot);
-
-                        getZeroConstInitList(elements, 0, tot, varDeclTree->info.type);
-                        initval = llvm::ConstantArray::get(llvm::ArrayType::get(BasicType(varDeclTree->info.type), tot), elements);
+                        initval = fillConstInitList(nullptr,varDeclTree -> info.layer.len,varDeclTree -> info.layer.len.size() - 1,1,varDeclTree -> info);
                     }
 
                     varDeclTree->ir = new llvm::GlobalVariable(TheModule, toLLVMType(varDeclTree->info), varDeclTree->info.isConst, llvm::GlobalValue::ExternalLinkage, initval, varDeclTree->name);
@@ -3049,9 +3095,26 @@ class ToLLVM:public Visitor
                     llvm::AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction,toLLVMType(varDeclTree -> info),nullptr, varDeclTree -> name);; 
                     if(varDeclTree -> initval)
                     {
-                        InitListExprTree * initListExprTree = dynamic_cast<InitListExprTree *>(varDeclTree -> initval);
-                        initListExprTree -> accept(this);
-                        useLocalInitList(Alloca,initListExprTree,initListExprTree->info.layer.len,initListExprTree->info.layer.len.size() - 1,0,varDeclTree -> info.type);           
+                        
+                        if(varDeclTree -> info.type == Char)
+                        {
+                            varDeclTree -> initval -> accept(this);
+                            yyerror(varDeclTree -> initval -> value);
+                            size_t len = varDeclTree -> initval -> value.size() + 1;
+                            llvm::Value * initpos;
+                            for(int i = 0;i < len;i++)
+                            {
+                                initpos = Builder.CreateInBoundsGEP(Alloca, {llvm::ConstantInt::get(TheContext, llvm::APInt(32, 0)), llvm::ConstantInt::get(TheContext, llvm::APInt(32, i))});
+                                Builder.CreateStore(llvm::ConstantInt::get(TheContext,llvm::APInt(8,varDeclTree -> initval ->value[i],1)),initpos);
+                            }
+                        }
+                        else    
+                        {
+                            InitListExprTree * initListExprTree = dynamic_cast<InitListExprTree *>(varDeclTree -> initval);
+                            initListExprTree -> accept(this);
+                            useLocalInitList(Alloca,initListExprTree,initListExprTree->info.layer.len,initListExprTree->info.layer.len.size() - 1,0,varDeclTree -> info.type);           
+                        }
+                            
                     }
                     varDeclTree -> ir = Alloca;
                 }
@@ -3063,10 +3126,26 @@ class ToLLVM:public Visitor
                     llvm::Constant * initValue = nullptr;
                     if(varDeclTree -> initval)
                     {
-                        varDeclTree -> initval -> accept(this);
-                        initValue = llvm::dyn_cast<llvm::Constant>((varDeclTree->initval->ir));
+                        void * vp = varDeclTree -> initval -> GetValue();
+                        //yyerror(vp);
+                        //yyerror("\n");
+                        switch(varDeclTree -> info.type)
+                        {
+                            case Int:
+                                initValue = llvm::ConstantInt::get(TheContext, llvm::APInt(32,*(int *)(vp),1));
+                                break;
+                            case Longlong:
+                                initValue = llvm::ConstantInt::get(TheContext, llvm::APInt(64,*(long long *)(vp),1));
+                                break;
+                            case Float:
+                                initValue = llvm::ConstantFP::get(TheContext, llvm::APFloat(*(float*)(vp)));
+                                break;
+                            case Double:
+                                initValue = llvm::ConstantFP::get(TheContext, llvm::APFloat(*(double*)vp));
+                                break;
+                        }
                     }
-                    if(!initValue)
+                    else
                     {
                         switch(varDeclTree -> info.type)
                         {
@@ -3077,6 +3156,8 @@ class ToLLVM:public Visitor
                                 initValue = llvm::ConstantInt::get(TheContext, llvm::APInt(64,0,1));
                                 break;
                             case Float:
+                                initValue = llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0f));
+                                break;
                             case Double:
                                 initValue = llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0));
                                 break;
@@ -3133,11 +3214,9 @@ class ToLLVM:public Visitor
             for(auto &arg:TheF -> args())
             {
                 funcDeclTree -> sons[index] -> accept(this);
-                //llvm::AllocaInst *Alloca = CreateEntryBlockAlloca(TheF, toLLVMType(funcDeclTree -> sons[index] -> info),nullptr,arg.getName());
                 Builder.CreateStore(&arg, funcDeclTree -> sons[index] -> ir);
                 index++;
-            }
-            
+            }            
             
             funcDeclTree -> body -> accept(this);
             
@@ -3184,9 +3263,11 @@ class ToLLVM:public Visitor
                     res = Builder.CreateICmpNE(ifStmtTree -> cond -> ir, llvm::ConstantInt::get(TheContext, llvm::APInt(64,0,1)), "ifcond");
                     break;
                 case Char:    
-                    res = Builder.CreateICmpNE(ifStmtTree -> cond -> ir, llvm::ConstantInt::get(TheContext, llvm::APInt(82,0,1)), "ifcond");
+                    res = Builder.CreateICmpNE(ifStmtTree -> cond -> ir, llvm::ConstantInt::get(TheContext, llvm::APInt(8,0,1)), "ifcond");
                     break;
                 case Float:
+                    res = Builder.CreateFCmpONE(ifStmtTree -> cond -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0f)), "ifcond");
+                    break;
                 case Double:
                     res = Builder.CreateFCmpONE(ifStmtTree -> cond -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0)), "ifcond");
                     break;
@@ -3241,6 +3322,8 @@ class ToLLVM:public Visitor
                     res = Builder.CreateICmpNE(whileStmtTree -> cond -> ir, llvm::ConstantInt::get(TheContext, llvm::APInt(8,0,1)), "whilecond");
                     break;
                 case Float:
+                    res = Builder.CreateFCmpONE(whileStmtTree -> cond -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0f)), "whilecond");
+                    break;
                 case Double:
                     res = Builder.CreateFCmpONE(whileStmtTree -> cond -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0)), "whilecond");
                     break;
@@ -3287,6 +3370,8 @@ class ToLLVM:public Visitor
                     res = Builder.CreateICmpNE(doStmtTree -> cond -> ir, llvm::ConstantInt::get(TheContext, llvm::APInt(8,0,1)), "docond");
                     break;
                 case Float:
+                    res = Builder.CreateFCmpONE(doStmtTree -> cond -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0f)), "docond");
+                    break;
                 case Double:
                     res = Builder.CreateFCmpONE(doStmtTree -> cond -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0)), "docond");
                     break;
@@ -3328,6 +3413,8 @@ class ToLLVM:public Visitor
                     res = Builder.CreateICmpNE(forStmtTree -> cond -> ir, llvm::ConstantInt::get(TheContext, llvm::APInt(8,0,1)), "forcond");
                     break;
                 case Float:
+                    res = Builder.CreateFCmpONE(forStmtTree -> cond -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0f)), "forcond");
+                    break;
                 case Double:
                     res = Builder.CreateFCmpONE(forStmtTree -> cond -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0)), "forcond");
                     break;
@@ -3385,8 +3472,11 @@ class ToLLVM:public Visitor
                         literalTree ->ir = llvm::ConstantInt::get(TheContext,llvm::APInt(64,literalTree -> lval,1));
                     break;
                 case Floating:
+                {
                     literalTree -> ir = llvm::ConstantFP::get(TheContext,llvm::APFloat(literalTree -> dval));
                     break;
+                }
+                    
                 case String:
                 {
                     size_t len = literalTree -> value.length() + 1;
@@ -3407,7 +3497,6 @@ class ToLLVM:public Visitor
         }
         virtual void VisitInitListExprTree(InitListExprTree * initListExprTree)
         {
-
             if(initListExprTree -> isGlobal)
             {
                 std::vector<size_t> steps(initListExprTree->info.layer.len.size() + 1);
@@ -3418,8 +3507,8 @@ class ToLLVM:public Visitor
                 }
 
                 std::vector<llvm::Constant *> elements(steps[initListExprTree->info.layer.len.size()]);
-                fillConstInitList(elements,initListExprTree,steps,initListExprTree->info.layer.len.size() - 1,initListExprTree->info.layer.len,initListExprTree->info.layer.len.size() - 1,0);
-                initListExprTree -> ir = llvm::ConstantArray::get(llvm::ArrayType::get(BasicType(initListExprTree -> info.type),steps[initListExprTree->info.layer.len.size()]),elements);
+                
+                initListExprTree -> ir = fillConstInitList(initListExprTree,initListExprTree->info.layer.len,initListExprTree->info.layer.len.size() - 1,0,initListExprTree -> info);
             }
             else
             {
@@ -3433,21 +3522,47 @@ class ToLLVM:public Visitor
             if(implicitCastExprTree -> castkind == "IntegralCast")
             {
                 if(implicitCastExprTree -> info.type == Int)
-                    implicitCastExprTree -> ir = Builder.CreateTrunc(implicitCastExprTree -> cast -> ir,llvm::Type::getInt32Ty(TheContext),"LonglongToInt");
+                    implicitCastExprTree -> ir = Builder.CreateSExtOrTrunc(implicitCastExprTree -> cast -> ir,llvm::Type::getInt32Ty(TheContext),"IntegealToInt");
+                else if(implicitCastExprTree -> info.type == Longlong)
+                    implicitCastExprTree -> ir = Builder.CreateSExt(implicitCastExprTree -> cast -> ir,llvm::Type::getInt64Ty(TheContext),"IntegralToLonglong");
                 else
-                    implicitCastExprTree -> ir = Builder.CreateSExt(implicitCastExprTree -> cast -> ir,llvm::Type::getInt64Ty(TheContext),"IntToLonglong");
+                    implicitCastExprTree -> ir = Builder.CreateTrunc(implicitCastExprTree -> cast -> ir,llvm::Type::getInt8Ty(TheContext),"IntegralToChar");
             }
             else if(implicitCastExprTree -> castkind == "IntegralToFloating")
-                implicitCastExprTree -> ir = Builder.CreateSIToFP(implicitCastExprTree -> cast -> ir,llvm::Type::getFloatTy(TheContext),"IntegralToFloat");
+            {
+                if(implicitCastExprTree -> info.type == Float)
+                    implicitCastExprTree -> ir = Builder.CreateSIToFP(implicitCastExprTree -> cast -> ir,llvm::Type::getFloatTy(TheContext),"IntegralToFloat");
+                else
+                    implicitCastExprTree -> ir = Builder.CreateSIToFP(implicitCastExprTree -> cast -> ir,llvm::Type::getDoubleTy(TheContext),"IntegralToDouble");
+            }    
             else if(implicitCastExprTree -> castkind == "FloatingToIntegral")
             {
                 if(implicitCastExprTree -> info.type == Int)
                     implicitCastExprTree -> ir = Builder.CreateFPToSI(implicitCastExprTree -> cast -> ir,llvm::Type::getInt32Ty(TheContext),"FloatToInt");
-                else
+                else if(implicitCastExprTree -> info.type == Longlong)
                     implicitCastExprTree -> ir = Builder.CreateFPToSI(implicitCastExprTree -> cast -> ir,llvm::Type::getInt64Ty(TheContext),"FloatToLonglong");
+                else
+                    implicitCastExprTree -> ir = Builder.CreateFPToSI(implicitCastExprTree -> cast -> ir,llvm::Type::getInt8Ty(TheContext),"FloatToChar");
+            }
+            else if(implicitCastExprTree -> castkind == "FloatingCast")
+            {
+                if(implicitCastExprTree -> info.type == Float)
+                    implicitCastExprTree -> ir = Builder.CreateFPCast(implicitCastExprTree -> cast -> ir,llvm::Type::getFloatTy(TheContext),"DoubleToFloat");
+                else
+                    implicitCastExprTree -> ir = Builder.CreateFPCast(implicitCastExprTree -> cast -> ir,llvm::Type::getDoubleTy(TheContext),"FloatToDouble");
             }
             else if(implicitCastExprTree -> castkind == "LValueToRValue")
                 implicitCastExprTree -> ir = Builder.CreateLoad(implicitCastExprTree -> cast -> ir);
+            else if(implicitCastExprTree -> castkind == "BitCast")
+            {
+                int delta = implicitCastExprTree -> cast -> info.layer.len.size() - implicitCastExprTree -> info.layer.len.size();
+                llvm::Value * value = implicitCastExprTree -> cast -> ir;
+                for(int i = 0;i < delta;i++)
+                {
+                    value = Builder.CreateInBoundsGEP(value, {llvm::ConstantInt::get(TheContext, llvm::APInt(32, 0)),llvm::ConstantInt::get(TheContext, llvm::APInt(32, 0))});
+                }
+                implicitCastExprTree -> ir = value;
+            }
             else
                 implicitCastExprTree -> ir = implicitCastExprTree -> cast -> ir;
         }
@@ -3463,7 +3578,7 @@ class ToLLVM:public Visitor
         }
         virtual void VisitDeclRefTree(DeclRefTree * declRefTree)
         {
-                declRefTree -> ir = declRefTree -> decl -> ir;
+            declRefTree -> ir = declRefTree -> decl -> ir;
         }
         virtual void VisitUnaryExprTree(UnaryExprTree * unaryExprTree)
         {
@@ -3490,8 +3605,14 @@ class ToLLVM:public Visitor
                     break;  
                 case OP_EXCLAIM:
                 {
-                    size_t len = (unaryExprTree -> info.type == Int) ? 32 :(unaryExprTree -> info.type == Char ? 8 : 64);
-                    llvm::Value * temp = Builder.CreateICmpEQ(unaryExprTree -> son -> ir,llvm::ConstantInt::get(TheContext, llvm::APInt(len,0,1)),"not");
+                    llvm::Value * temp;
+                    if(unaryExprTree -> son -> info.type < Float)
+                    {
+                        size_t len = (unaryExprTree -> info.type == Int) ? 32 :(unaryExprTree -> info.type == Char ? 8 : 64);
+                        temp = Builder.CreateICmpEQ(unaryExprTree -> son -> ir,llvm::ConstantInt::get(TheContext, llvm::APInt(len,0,1)),"not");
+                    }
+                    else
+                        temp = Builder.CreateFCmpUEQ(unaryExprTree -> son -> ir,llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0)),"not");
                     unaryExprTree -> ir = Builder.CreateZExt(temp,llvm::Type::getInt32Ty(TheContext));
                     break;
                 }
@@ -3773,6 +3894,8 @@ class ToLLVM:public Visitor
                                 lres = Builder.CreateICmpNE(binaryExprTree -> left -> ir, llvm::ConstantInt::get(TheContext, llvm::APInt(8,0,1)), "and_left");
                                 break;
                             case Float:
+                                lres = Builder.CreateFCmpONE(binaryExprTree -> left -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0f)), "and_left");
+                                break;
                             case Double:
                                 lres = Builder.CreateFCmpONE(binaryExprTree -> left -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0)), "and_left");
                                 break;
@@ -3800,6 +3923,8 @@ class ToLLVM:public Visitor
                                 rres = Builder.CreateICmpNE(binaryExprTree -> right -> ir, llvm::ConstantInt::get(TheContext, llvm::APInt(8,0,1)), "and_right");
                                 break;
                             case Float:
+                                rres = Builder.CreateFCmpONE(binaryExprTree -> right -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0f)), "and_right");
+                                break;
                             case Double:
                                 rres = Builder.CreateFCmpONE(binaryExprTree -> right -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0)), "and_right");
                                 break;
@@ -3837,6 +3962,8 @@ class ToLLVM:public Visitor
                                 lres = Builder.CreateICmpNE(binaryExprTree -> left -> ir, llvm::ConstantInt::get(TheContext, llvm::APInt(8,0,1)), "or_left");
                                 break;
                             case Float:
+                                lres = Builder.CreateFCmpONE(binaryExprTree -> left -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0f)), "or_left");
+                                break;
                             case Double:
                                 lres = Builder.CreateFCmpONE(binaryExprTree -> left -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0)), "or_left");
                                 break;
@@ -3864,6 +3991,8 @@ class ToLLVM:public Visitor
                                 rres = Builder.CreateICmpNE(binaryExprTree -> right -> ir, llvm::ConstantInt::get(TheContext, llvm::APInt(8,0,1)), "or_right");
                                 break;
                             case Float:
+                                rres = Builder.CreateFCmpONE(binaryExprTree -> right -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0f)), "or_right");
+                                break;
                             case Double:
                                 rres = Builder.CreateFCmpONE(binaryExprTree -> right -> ir, llvm::ConstantFP::get(TheContext, llvm::APFloat(0.0)), "or_right");
                                 break;

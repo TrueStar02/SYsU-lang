@@ -8,7 +8,6 @@ int ifElseIf() {
   if(a == 6 || b == 0xb) {
     return a;
   }
-
   else {
     if (b == 10 && a == 1)
       a = 25;

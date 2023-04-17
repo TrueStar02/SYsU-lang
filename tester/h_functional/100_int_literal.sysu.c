@@ -23,11 +23,6 @@ int main() {
   const int k2 = 0x80000000 + 1;
   const int k3 = 0x7fFffffF;
   const int k4 = 0x7fFffffF - 1;
-  //const int k0 = -214;
-  //const int k1 = 0x80000;
-  //const int k2 = 0x80000 + 1;
-  //const int k3 = 0x7fffF;
-  //const int k4 = 0x7ffffF - 1;
   int a1, a2, a3, a4;
   a1 = get_ans( 0, k0, k1);
   a1 = get_ans(a1, k0 + 1, k2);
@@ -52,5 +47,4 @@ int main() {
   a4 = get_ans_se(a4, k3, k4);
   a4 = get_ans_se(a4, k0 / 2, k1 / 2);
   return a1 + a2 + a3 + a4;
-  //return 0;
 }

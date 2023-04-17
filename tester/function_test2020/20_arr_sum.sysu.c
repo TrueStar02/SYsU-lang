@@ -1,7 +1,6 @@
 #include <sysy/sylib.h>
-	int a[5];
+int a[5];
 int main(){
-
 	a[0] = getint();
 	a[1] = getint();
 	a[2] = getint();

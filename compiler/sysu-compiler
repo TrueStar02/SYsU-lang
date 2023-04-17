@@ -345,6 +345,10 @@ def main(*argv):
 
                             if res[0].returncode != jt.returncode or \
                                     res[0].stdout != jt.stdout:
+                                print("Your Out:")
+                                print(res[0].stdout)
+                                print("Standard Out:")
+                                print(jt.stdout)
                                 logging.getLogger(__name__).error(
                                     "fail: not equ")
                                 return wk_exit(-1)
